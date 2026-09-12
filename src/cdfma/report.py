@@ -32,8 +32,30 @@ def _trade_off_block(trade_off: TradeOff) -> str:
     return "\n".join(lines)
 
 
+_FINDINGS_NOTE = (
+    "Every rule that fired on this option's graph, one line each: which rule\n"
+    "(see the Legend), what subject it fired on, and why. [PROVISIONAL] means\n"
+    "an input came from an archetype, a generic factor, or an estimate.\n"
+    "Trade-offs below are two opposing rules firing on the same subject —\n"
+    "held side by side, not resolved."
+)
+
+_GAP_REPORT_NOTE = (
+    "Rules that could NOT run because a required field was absent — a gap in\n"
+    "the data, never a default or a silent pass. Absence here is itself a\n"
+    "finding about what the data doesn't yet support."
+)
+
+_COMPARISON_NOTE = (
+    "Every indicator (see the Legend) for each option, side by side; then, if\n"
+    "a priority profile is declared, the ranking it produces, the rank-\n"
+    "stability check across dimension reordering and discount rates, and the\n"
+    "IND-08 break-even between the two options."
+)
+
+
 def render_findings(result: EvaluationResult) -> str:
-    lines = [f"=== Findings — option {result.option_id!r} ==="]
+    lines = [f"=== Findings — option {result.option_id!r} ===", _FINDINGS_NOTE, ""]
     findings = sorted(result.findings, key=lambda f: (f.rule_id, f.subject_kind, f.subject_id))
     if not findings:
         lines.append("  (no findings)")
@@ -50,7 +72,7 @@ def render_findings(result: EvaluationResult) -> str:
 
 
 def render_gap_report(results: list[EvaluationResult]) -> str:
-    lines = ["=== Gap report ==="]
+    lines = ["=== Gap report ===", _GAP_REPORT_NOTE, ""]
     any_gaps = False
     for result in results:
         gaps = sorted(result.gaps, key=lambda g: (g.rule_id, g.subject_kind, g.subject_id))
@@ -75,7 +97,7 @@ def render_comparison(
     stability: RankStabilityResult | None = None,
     break_evens: dict[str, int | None] | None = None,
 ) -> str:
-    lines = ["=== Option comparison ==="]
+    lines = ["=== Option comparison ===", _COMPARISON_NOTE, ""]
     option_ids = sorted(evaluations)
     indicator_ids = sorted({key for e in evaluations.values() for key in e.indicators})
 
