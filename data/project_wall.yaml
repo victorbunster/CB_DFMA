@@ -46,6 +46,38 @@ options:
     composition_edges: []
     dependency_edges: []
 
+  option_c_nailed:
+    instances:
+    - id: m1
+      element_type_id: cladding_panel_alu_mw_25
+      label: ''
+    - id: m2
+      element_type_id: substrate_60
+      label: ''
+    connection_instances:
+    - id: c1
+      connection_type_id: nail_fixing_timber
+      element_instance_id: m1
+      host_instance_id: m2
+    composition_edges: []
+    dependency_edges: []
+
+  option_d_rivet:
+    instances:
+    - id: m1
+      element_type_id: cladding_panel_alu_mw_25
+      label: ''
+    - id: m2
+      element_type_id: substrate_60
+      label: ''
+    connection_instances:
+    - id: c1
+      connection_type_id: rivet_fixing_aluminium
+      element_instance_id: m1
+      host_instance_id: m2
+    composition_edges: []
+    dependency_edges: []
+
 priority:
   constraints:
     - indicator_id: IND-07_undiscounted

@@ -15,15 +15,59 @@ from cdfma.schema import Instance
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
+# A self-contained two-option project graph, independent of the real
+# data/project_wall.yaml's current content — that file is meant to be
+# extended by the app itself (the "Build wall" tab, or CLAUDE.md's own
+# worked-example pair), so a test asserting "exactly these options exist"
+# against it would break every time someone used the feature it's testing.
+_TWO_OPTION_PROJECT_WALL = """
+options:
+  option_a_bonded:
+    instances:
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+      - id: substrate_1
+        element_type_id: substrate_60
+    connection_instances:
+      - id: joint_1
+        connection_type_id: adhesive_bond
+        element_instance_id: cladding_1
+        host_instance_id: substrate_1
+    composition_edges: []
+    dependency_edges: []
+  option_b_mechanical:
+    instances:
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+      - id: substrate_1
+        element_type_id: substrate_60
+    connection_instances:
+      - id: joint_1
+        connection_type_id: mechanical_bracket
+        element_instance_id: cladding_1
+        host_instance_id: substrate_1
+    composition_edges: []
+    dependency_edges: []
+
+priority:
+  constraints: []
+  targets: []
+  profile:
+    dimensions: [IND-07_undiscounted]
+    indifference_band: 0.05
+"""
+
 
 def _copy_data(tmp_path: Path) -> Path:
-    for name in ("project_parameters.yaml", "element_types.yaml", "connection_types.yaml", "rules.yaml", "project_wall.yaml"):
+    for name in ("project_parameters.yaml", "element_types.yaml", "connection_types.yaml", "rules.yaml"):
         (tmp_path / name).write_text((DATA_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "project_wall.yaml").write_text(_TWO_OPTION_PROJECT_WALL, encoding="utf-8")
     return tmp_path
 
 
-def test_list_option_ids() -> None:
-    assert list_option_ids(DATA_DIR / "project_wall.yaml") == ["option_a_bonded", "option_b_mechanical"]
+def test_list_option_ids(tmp_path: Path) -> None:
+    data_dir = _copy_data(tmp_path)
+    assert list_option_ids(data_dir / "project_wall.yaml") == ["option_a_bonded", "option_b_mechanical"]
 
 
 def test_evaluate_project_default_runs_every_option(tmp_path: Path) -> None:

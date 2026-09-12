@@ -15,11 +15,43 @@ from cdfma.schema import ConnectionInstance, Instance
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
+# A self-contained two-option project graph, independent of the real
+# data/project_wall.yaml's current content — that file is meant to be
+# extended by the app itself (the "Build wall" tab), so a test asserting
+# "exactly these options exist" against it would break every time someone
+# used the feature this test is exercising.
+_TWO_OPTION_PROJECT_WALL = """
+options:
+  option_a_bonded:
+    instances:
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+    connection_instances: []
+    composition_edges: []
+    dependency_edges: []
+  option_b_mechanical:
+    instances:
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+    connection_instances: []
+    composition_edges: []
+    dependency_edges: []
+
+priority:
+  constraints: []
+  targets: []
+  profile:
+    dimensions: [IND-01]
+    indifference_band: 0.05
+"""
+
 
 def _copy_project_wall(tmp_path: Path) -> Path:
-    for name in ("project_parameters.yaml", "element_types.yaml", "connection_types.yaml", "project_wall.yaml"):
+    for name in ("project_parameters.yaml", "element_types.yaml", "connection_types.yaml"):
         (tmp_path / name).write_text((DATA_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
-    return tmp_path / "project_wall.yaml"
+    target = tmp_path / "project_wall.yaml"
+    target.write_text(_TWO_OPTION_PROJECT_WALL, encoding="utf-8")
+    return target
 
 
 def _sample_graph() -> Graph:
