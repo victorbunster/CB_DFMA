@@ -91,9 +91,14 @@ def test_loads_shipped_element_types() -> None:
     assert panel.cost.residual_value == 0
 
 
-def test_loads_shipped_connection_types_empty() -> None:
+def test_loads_shipped_connection_types() -> None:
+    # adhesive_bond / mechanical_bracket carry PLACEHOLDER DataQuality
+    # (docs/open-questions.md #1) but are otherwise real, from the
+    # worked-example appendix.
     connection_types = load_connection_types(DATA_DIR / "connection_types.yaml")
-    assert connection_types == {}
+    assert set(connection_types) == {"adhesive_bond", "mechanical_bracket"}
+    assert connection_types["adhesive_bond"].damage_to_host == "major"
+    assert connection_types["mechanical_bracket"].re_installable is True
 
 
 def test_library_load_bundles_all_three(tmp_path: Path) -> None:

@@ -76,14 +76,17 @@ src/cdfma/
   priority.py               constraints, dominance, ranking, rank stability
   report.py                 findings / comparison / gap renderers
   cli.py                    entry point
+  gui.py                    Tkinter desktop GUI (justified 10th module, see below)
 data/
   project_parameters.yaml   element_types.yaml   connection_types.yaml
   project_wall.yaml         rules.yaml
 tests/
-  test_acceptance.py        fixtures/
+  test_acceptance.py        test_library.py      fixtures/
 ```
 
-Nine modules. Do not add a tenth without saying why. Do not add a database, a web framework, an ORM or a package layer.
+Nine modules plus one justified exception. Do not add an eleventh without saying why. Do not add a database, a web framework, an ORM or a package layer.
+
+**The one exception:** `gui.py`, added by explicit user request for a way to exercise the MVP without reading CLI text. It is Tkinter (stdlib — no new dependency, no web framework), and it is a thin wrapper: no domain content, no evaluation logic: every action calls straight into `cli.evaluate_project` and renders results with `report.py`'s existing renderers. If this stops being true — if `gui.py` starts computing anything itself — that is a defect, the same as a `lifecycle_ghg` field appearing on a library object.
 
 ---
 

@@ -1,0 +1,72 @@
+# Project graph (facts) — spec §2.5, §1: "two compared variants" of the
+# same wall build-up, differing only in the joint between skin and
+# structure (matching docs/worked-example.md: adhesive bond vs. a
+# mechanically-fixed equivalent). Both options share the same two
+# instances and connection topology; only connection_type_id differs.
+#
+# `priority` (constraints/targets/profile) is not one of CLAUDE.md §4's
+# named data files — it is folded into this file as the one remaining
+# per-project data file, keeping the priority layer's preferences
+# data-driven rather than hardcoded in priority.py. Values are transcribed
+# from docs/worked-example.md §3 where it gives one ("target of 80% mass
+# recoverable", "5% indifference band on cost"); the capital-cost cap is
+# mentioned there only qualitatively ("a hard capital-cost cap", no
+# number), so its threshold is a clearly-labeled PLACEHOLDER.
+
+options:
+  option_a_bonded:
+    instances:
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+        label: "Cladding panel, bay 1"
+      - id: substrate_1
+        element_type_id: substrate_60
+        label: "Substrate behind bay 1"
+    connection_instances:
+      - id: joint_1
+        connection_type_id: adhesive_bond
+        element_instance_id: cladding_1
+        host_instance_id: substrate_1
+    composition_edges: []
+    dependency_edges: []
+
+  option_b_mechanical:
+    instances:
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+        label: "Cladding panel, bay 1"
+      - id: substrate_1
+        element_type_id: substrate_60
+        label: "Substrate behind bay 1"
+    connection_instances:
+      - id: joint_1
+        connection_type_id: mechanical_bracket
+        element_instance_id: cladding_1
+        host_instance_id: substrate_1
+    composition_edges: []
+    dependency_edges: []
+
+priority:
+  constraints:
+    - indicator_id: IND-07_undiscounted
+      comparator: "<="
+      # PLACEHOLDER: docs/worked-example.md §3 declares "a hard
+      # capital-cost cap" without a number.
+      threshold: 3000
+  targets:
+    - indicator_id: IND-01
+      comparator: ">="
+      # REAL, from docs/worked-example.md §3: "a target of 80% mass
+      # recoverable at component tier". IND-01 here is a decomposable-mass
+      # proxy (DRV-02's true component-tier recovery test is out of scope
+      # for Slice 1 — see src/cdfma/engine.py), so this is an approximation
+      # of the same target, not the identical measure.
+      threshold: 0.8
+  profile:
+    # Ordering per docs/worked-example.md §3: "cost, then feasibility,
+    # then recovery potential". IND-02 (fraction of connections
+    # reversible) stands in for "feasibility" — the spec does not name an
+    # indicator called feasibility, so this is an approximation.
+    dimensions: [IND-07_undiscounted, IND-02, IND-01]
+    # REAL, from docs/worked-example.md §3: "a 5% indifference band on cost".
+    indifference_band: 0.05

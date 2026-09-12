@@ -8,11 +8,16 @@
 # `nestable` is not stated in the source and is left null rather than
 # invented — see docs/open-questions.md.
 #
-# substrate_60, the joint's other side in the worked example, is NOT yet
-# transcribed here: the appendix only gives its service_life, layer,
-# shape_class and GHG/cost figures — composition, mass, envelope,
-# decomposable, declared_recovery_pathway and provenance are never stated.
-# Recorded as an open question rather than invented.
+# substrate_60's service_life, layer, shape_class, tier and GHG/cost
+# figures below are transcribed from the appendix. Its composition, mass,
+# envelope, decomposable, declared_recovery_pathway, recovery_preconditions,
+# provenance, coordination_module, orientation_constraint, stackable,
+# geometry_provenance and both DataQuality records are NOT given anywhere
+# in the source docs and are filled in here as clearly-labeled
+# PLACEHOLDER values (per the user's explicit choice — see the
+# conversation and docs/open-questions.md #3), so the engine has a full
+# graph to run end to end. Replace before treating any output about
+# substrate_60 as real.
 
 element_types:
   - id: cladding_panel_alu_mw_25
@@ -77,3 +82,63 @@ element_types:
         geography: AU-VIC
         uncertainty: "±20%"
         basis_note: "no reuse market evidence behind residual_value: 0"
+
+  - id: substrate_60
+    name: "Substrate, 60yr (structure)"
+    layer: structure
+    tier: element
+
+    service_life: 60
+    service_life_basis: standard
+    composition:
+      # PLACEHOLDER: not given in the source docs.
+      - material: concrete
+        mass_fraction: 1.0
+    decomposable: true  # PLACEHOLDER
+    declared_recovery_pathway: recycle  # PLACEHOLDER
+    recovery_preconditions: []
+    provenance: archetype
+
+    shape_class: planar
+    envelope:
+      # PLACEHOLDER: not given in the source docs.
+      length: 1200
+      width: 2400
+      thickness: 150
+    envelope_fill_ratio: 1.0  # PLACEHOLDER
+    mass: 130  # PLACEHOLDER, kg
+    orientation_constraint: keep_vertical  # PLACEHOLDER
+    stackable: false  # PLACEHOLDER
+    nestable: null
+    geometry_provenance: archetype  # PLACEHOLDER
+    g_level: G1
+
+    embodied_ghg:
+      declared_unit: per_m2
+      ghg_A1A3: 64.0
+      ghg_C: 5.2
+      ghg_D: 0.0  # PLACEHOLDER: not given in the source docs
+      ghg_data:
+        # PLACEHOLDER DataQuality: not given in the source docs.
+        source: "PLACEHOLDER - pending citation"
+        data_type: estimate
+        vintage: 2026
+        geography: AU
+        uncertainty: "±25%"
+        basis_note: "PLACEHOLDER - see docs/open-questions.md #3"
+
+    cost:
+      currency: AUD
+      price_date: "2026-06"
+      cost_supply: 180
+      cost_install: 95
+      cost_removal: 40
+      residual_value: 0  # PLACEHOLDER: not given in the source docs
+      cost_data:
+        # PLACEHOLDER DataQuality: not given in the source docs.
+        source: "PLACEHOLDER - pending citation"
+        data_type: estimate
+        vintage: 2026
+        geography: AU
+        uncertainty: "±25%"
+        basis_note: "PLACEHOLDER - see docs/open-questions.md #3"

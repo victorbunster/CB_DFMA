@@ -2,13 +2,65 @@
 # interface roles and geometry types, out of scope for Slice 1 — see
 # CLAUDE.md §2 and src/cdfma/schema.py).
 #
-# Left empty for now: the worked example in docs/mvp-scope.md's appendix
-# gives adhesive_bond and mechanical_bracket's removal method, damage
-# expectations and GHG/cost figures, but never a DataQuality record
-# (source, data_type, vintage, geography, uncertainty) for those figures.
-# CLAUDE.md §5 (architecture invariant 7) requires one for every GHG and
-# cost figure loaded — fabricating a source citation to fill the gap would
-# defeat the entire point of DataQuality, so this is recorded as an open
-# question (docs/open-questions.md) rather than invented.
+# removal_method, damage_to_self/host, re_installable, reuse_cycles,
+# tolerance_absorbed, ghg_A1A3, ghg_A5, cost_install and cost_removal
+# below are transcribed from the docs/mvp-scope.md worked-example
+# appendix. Their DataQuality records (ghg_data/cost_data) are NOT given
+# anywhere in the source docs — CLAUDE.md §5 (architecture invariant 7)
+# still requires one, so these are clearly-labeled PLACEHOLDER values
+# (per the user's explicit choice — see the conversation and
+# docs/open-questions.md #1), not real citations.
 
-connection_types: []
+connection_types:
+  - id: adhesive_bond
+    name: "Adhesive bond"
+    removal_method: destructive
+    damage_to_self: major
+    damage_to_host: major
+    re_installable: false
+    reuse_cycles: 0
+    ghg_A1A3: 1.8
+    ghg_A5: 0.4
+    ghg_data:
+      source: "PLACEHOLDER - pending citation"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±25%"
+      basis_note: "PLACEHOLDER - see docs/open-questions.md #1"
+    cost_install: 18
+    cost_removal: 22
+    cost_data:
+      source: "PLACEHOLDER - pending citation"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±25%"
+      basis_note: "PLACEHOLDER - see docs/open-questions.md #1"
+
+  - id: mechanical_bracket
+    name: "Mechanical bracket"
+    removal_method: unbolt
+    damage_to_self: none
+    damage_to_host: minor
+    re_installable: true
+    reuse_cycles: 3
+    tolerance_absorbed: 8
+    ghg_A1A3: 6.4
+    ghg_A5: 0.9
+    ghg_data:
+      source: "PLACEHOLDER - pending citation"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±25%"
+      basis_note: "PLACEHOLDER - see docs/open-questions.md #1"
+    cost_install: 52
+    cost_removal: 30
+    cost_data:
+      source: "PLACEHOLDER - pending citation"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±25%"
+      basis_note: "PLACEHOLDER - see docs/open-questions.md #1"

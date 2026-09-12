@@ -1,0 +1,206 @@
+# Knowledge base (judgements) — spec §3, scoped to Slice 1's ten rules
+# (CLAUDE.md §2): DRV-01, DRV-04, DRV-05, DRV-06, DRV-07; CON-001, CON-003;
+# REC-001; SEP-001; DFM-001.
+#
+# `logic` values marked PLACEHOLDER are exactly that: the user explicitly
+# chose (see conversation) to have these filled in with clearly-labeled
+# placeholders so the engine runs end to end, rather than left as gaps.
+# CON-001's 15-year threshold is NOT a placeholder — it is given directly
+# in docs/worked-example.md ("above its 15-year threshold"), so it is used
+# as real content. See docs/open-questions.md for the rest.
+
+rules:
+  - id: DRV-01
+    kind: derivation
+    scope: {subject_kind: connection_instance}
+    requires:
+      - connection_type.removal_method
+      - connection_type.damage_to_self
+      - connection_type.damage_to_host
+      - connection_type.re_installable
+    logic: {}
+    output:
+      text: >-
+        Connection {connection_type_id}: removal_method={removal_method},
+        damage_to_self={damage_to_self}, damage_to_host={damage_to_host},
+        re_installable={re_installable} -> {result}.
+      severity: info
+    source: "mvp-scope.md §3.2 DRV-01"
+    opposes: []
+
+  - id: DRV-04
+    kind: derivation
+    scope: {subject_kind: instance}
+    requires:
+      - element_type.mass
+      - element_type.envelope.length
+      - element_type.envelope.width
+      - element_type.envelope.thickness
+    logic:
+      # PLACEHOLDER: manual-handling mass/dimension breakpoints are not
+      # given anywhere in the spec or its worked example. See
+      # docs/open-questions.md #6.
+      one_person_max_mass_kg: 25
+      one_person_max_dimension_mm: 1200
+      two_person_max_mass_kg: 50
+      two_person_max_dimension_mm: 2400
+    output:
+      text: >-
+        {element_type_id}: mass={mass}kg, max envelope dimension=
+        {max_dimension_mm}mm -> handling class {result}.
+      severity: info
+    source: "mvp-scope.md §3.2 DRV-04 (thresholds: PLACEHOLDER, see docs/open-questions.md #6)"
+    opposes: []
+
+  - id: DRV-05
+    kind: derivation
+    scope: {subject_kind: instance}
+    requires:
+      - element_type.service_life
+    logic: {}
+    output:
+      text: >-
+        {element_type_id}: service_life={service_life}y over a
+        {study_period}y study period -> {result} replacement(s).
+      severity: info
+    source: "mvp-scope.md §3.2 DRV-05"
+    opposes: []
+
+  - id: DRV-06
+    kind: derivation
+    scope: {subject_kind: connection_instance}
+    requires:
+      - connection_type.damage_to_host
+      - element_type.service_life
+      - host_element_type.service_life
+    logic: {}
+    output:
+      text: >-
+        {host_element_type_id} as host of {element_element_type_id} via
+        {connection_type_id} (damage_to_host={damage_to_host}): cascades=
+        {cascades}, own replacement count={host_own_replacement_count} ->
+        effective replacement count {result}.
+      severity: info
+    source: "mvp-scope.md §3.2 DRV-06"
+    opposes: []
+
+  - id: DRV-07
+    kind: derivation
+    scope: {subject_kind: instance}
+    requires:
+      - element_type.embodied_ghg.ghg_A1A3
+      - element_type.embodied_ghg.ghg_C
+      - element_type.embodied_ghg.ghg_D
+      - element_type.embodied_ghg.declared_unit
+      - element_type.cost.cost_supply
+      - element_type.cost.cost_install
+      - element_type.cost.cost_removal
+      - element_type.cost.residual_value
+    logic: {}
+    output:
+      text: >-
+        {element_type_id}: upfront GHG={upfront_ghg}, lifecycle GHG=
+        {lifecycle_ghg} (module D, separate={ghg_d}); upfront cost=
+        {upfront_cost}, lifecycle cost undiscounted={lifecycle_cost_undiscounted},
+        at {discount_rate:.0%}={lifecycle_cost_discounted}.
+      severity: info
+    source: "mvp-scope.md §3.2 DRV-07"
+    opposes: []
+
+  - id: CON-001
+    kind: criterion
+    scope: {subject_kind: connection_instance}
+    requires:
+      - connection_type.damage_to_self
+      - connection_type.damage_to_host
+      - connection_type.re_installable
+      - element_type.service_life
+      - host_element_type.service_life
+    logic:
+      # REAL value, from docs/worked-example.md: "above its 15-year threshold".
+      service_life_differential_threshold_years: 15
+    output:
+      text: >-
+        Irreversible joint across a {differential}-year service-life
+        differential (threshold {threshold} years): the {shorter_service_life}-year
+        {shorter_element_type_id} cannot be replaced without damaging the
+        {longer_service_life}-year {longer_element_type_id}.
+      severity: finding
+      recommended_action: "substitute_joint_type(mechanical)"
+    source: "mvp-scope.md §3.2 CON-001; docs/worked-example.md §2"
+    opposes: []
+
+  - id: CON-003
+    kind: criterion
+    scope: {subject_kind: instance}
+    requires:
+      - element_type.cost.cost_removal
+      - element_type.cost.residual_value
+      - element_type.embodied_ghg.ghg_C
+      - element_type.embodied_ghg.ghg_D
+    logic:
+      # PLACEHOLDER: the "declared margin" is not given a value anywhere
+      # in the spec. See docs/open-questions.md #7.
+      cost_removal_margin: 10.0
+    output:
+      text: >-
+        {element_type_id}: declared pathway {declared_recovery_pathway}
+        is not worth doing (cost_removal={cost_removal} vs
+        residual_value={residual_value}, margin={cost_margin},
+        fails_on_cost={fails_on_cost}; ghg_C={ghg_c} vs ghg_D={ghg_d},
+        fails_on_ghg={fails_on_ghg}).
+      severity: finding
+    source: "mvp-scope.md §3.2 CON-003 (margin: PLACEHOLDER, see docs/open-questions.md #7)"
+    opposes: []
+
+  - id: REC-001
+    kind: criterion
+    scope: {subject_kind: connection_instance}
+    requires:
+      - element_type.declared_recovery_pathway
+      - connection_type.damage_to_self
+    logic: {}
+    output:
+      text: >-
+        {element_type_id}: declared recovery pathway
+        {declared_recovery_pathway} is contradicted by {connection_type_id}
+        (damage_to_self={damage_to_self}).
+      severity: finding
+    source: "mvp-scope.md §3.2 REC-001; docs/worked-example.md §2"
+    opposes: []
+
+  - id: SEP-001
+    kind: criterion
+    scope: {subject_kind: instance}
+    requires:
+      - element_type.decomposable
+      - element_type.composition
+    logic: {}
+    output:
+      text: >-
+        {element_type_id}: not decomposable with multiple materials
+        ({materials}) — not separable at end of life.
+      severity: finding
+    source: "mvp-scope.md §3.2 SEP-001"
+    opposes: []
+
+  - id: DFM-001
+    kind: criterion
+    scope: {subject_kind: connection_instance}
+    requires:
+      - connection_type.damage_to_self
+      - connection_type.damage_to_host
+      - connection_type.re_installable
+      - element_type.service_life
+      - host_element_type.service_life
+    logic:
+      service_life_differential_threshold_years: 15
+    output:
+      text: >-
+        {connection_type_id} reduces part count and site fixings
+        (upfront GHG {connection_ghg_upfront}, install cost
+        {connection_cost_install}) across the same {differential}-year
+        differential CON-001 flags.
+      severity: finding
+    source: "mvp-scope.md §3.2 DFM-001; docs/worked-example.md §2"
+    opposes: ["CON-001"]

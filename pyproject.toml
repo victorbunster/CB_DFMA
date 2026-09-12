@@ -15,5 +15,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
 
+[project.scripts]
+cdfma = "cdfma.cli:main"
+cdfma-gui = "cdfma.gui:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
