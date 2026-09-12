@@ -8,6 +8,7 @@ loading and lookup.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TypeVar
 
@@ -66,6 +67,46 @@ def _load_records(path: Path, key: str, model: type[_T]) -> dict[str, _T]:
 def load_element_types(path: Path) -> dict[str, ElementType]:
     """Load and validate ``element_types.yaml``, keyed by id."""
     return _load_records(path, "element_types", ElementType)
+
+
+def append_element_type(path: Path, element_type: ElementType) -> None:
+    """Add one new element type to ``element_types.yaml`` (spec §2.1) —
+    the manual-entry path CLAUDE.md §6's Interface (application) section
+    describes for the library layer.
+
+    Appends the validated record as text rather than re-serializing the
+    whole file: ``data/*.yaml`` carries hand-written comments (PLACEHOLDER
+    notes, provenance explanations) that a parse-and-dump round trip would
+    silently discard. The rest of the file is never touched.
+
+    Raises ``LibraryError`` if ``element_type.id`` already exists in the
+    file — never overwrites a record.
+    """
+    existing = load_element_types(path)
+    if element_type.id in existing:
+        raise LibraryError(f"element type id {element_type.id!r} already exists in {path}")
+    _append_record(path, "element_types", element_type)
+
+
+# An empty flow-style list ("key: []") cannot be followed by a block-style
+# item on the next line — appending text after it would produce invalid
+# YAML. Matched so it can be turned into a bare "key:" block header first.
+_EMPTY_FLOW_LIST = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*:)[ \t]*\[[ \t]*\][ \t]*$", re.MULTILINE)
+
+
+def _append_record(path: Path, key: str, record: BaseModel) -> None:
+    text = path.read_text(encoding="utf-8")
+    match = _EMPTY_FLOW_LIST.search(text)
+    if match is not None and match.group(1) == f"{key}:":
+        text = text[: match.start()] + f"{key}:" + text[match.end() :]
+        path.write_text(text, encoding="utf-8")
+
+    block = yaml.safe_dump(
+        [record.model_dump(mode="json")], default_flow_style=False, sort_keys=False, allow_unicode=True
+    )
+    indented = "\n".join(("  " + line if line else line) for line in block.splitlines())
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("\n" + indented + "\n")
 
 
 def load_connection_types(path: Path) -> dict[str, ConnectionType]:

@@ -1,7 +1,7 @@
-"""Unit tests for the library layer: YAML loading, validation and id
-resolution (src/cdfma/library.py). These exercise code mechanics with
-synthetic fixture data; they are not the spec's numbered acceptance tests
-(see tests/test_acceptance.py, not yet written) and do not stand in for
+"""Unit tests for the library layer: YAML loading, validation, id
+resolution, and manual entry (src/cdfma/library.py). These exercise code
+mechanics with synthetic fixture data; they are not the spec's numbered
+acceptance tests (see tests/test_acceptance.py) and do not stand in for
 docs/worked-example.md's answer key.
 """
 
@@ -10,8 +10,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
-from cdfma.library import Library, LibraryError, load_connection_types, load_element_types, load_project_parameters
+from cdfma.library import (
+    Library,
+    LibraryError,
+    append_element_type,
+    load_connection_types,
+    load_element_types,
+    load_project_parameters,
+)
+from cdfma.schema import CompositionEntry, DataQuality, ElementCost, ElementType, EmbodiedGHG, Envelope
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -167,3 +176,69 @@ def test_malformed_yaml_raises(tmp_path: Path) -> None:
     path = _write(tmp_path / "element_types.yaml", "element_types: [this is not: valid yaml\n")
     with pytest.raises(LibraryError, match="invalid YAML"):
         load_element_types(path)
+
+
+# --- append_element_type: manual entry (gui.py's "Add material" tab) ---
+
+
+def _sample_element_type(element_type_id: str = "test_brick") -> ElementType:
+    dq = DataQuality(source="test", data_type="estimate", vintage=2026, geography="AU", uncertainty="±20%")
+    return ElementType(
+        id=element_type_id,
+        name="Test brick",
+        layer="structure",
+        tier="material",
+        service_life=50,
+        service_life_basis="assumed",
+        composition=[CompositionEntry(material="clay", mass_fraction=1.0)],
+        decomposable=True,
+        declared_recovery_pathway="recycle",
+        provenance="archetype",
+        shape_class="volumetric",
+        envelope=Envelope(length=230, width=110, thickness=76),
+        envelope_fill_ratio=1.0,
+        mass=3.0,
+        orientation_constraint="none",
+        stackable=True,
+        geometry_provenance="archetype",
+        g_level="G0",
+        embodied_ghg=EmbodiedGHG(declared_unit="per_kg", ghg_A1A3=0.24, ghg_C=0.01, ghg_D=0.0, ghg_data=dq),
+        cost=ElementCost(
+            currency="AUD", price_date="2026-06", cost_supply=0.8, cost_install=0.3, cost_removal=0.1,
+            residual_value=0.0, cost_data=dq,
+        ),
+    )
+
+
+def test_append_element_type_preserves_existing_content_and_reloads(tmp_path: Path) -> None:
+    target = tmp_path / "element_types.yaml"
+    target.write_text((DATA_DIR / "element_types.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+    before = target.read_text(encoding="utf-8")
+
+    append_element_type(target, _sample_element_type())
+
+    after = target.read_text(encoding="utf-8")
+    assert before in after, "existing content (including comments) must survive untouched"
+
+    reloaded = load_element_types(target)
+    assert "cladding_panel_alu_mw_25" in reloaded  # original record still loads
+    assert reloaded["test_brick"].mass == 3.0
+
+
+def test_append_element_type_rejects_duplicate_id(tmp_path: Path) -> None:
+    target = tmp_path / "element_types.yaml"
+    target.write_text((DATA_DIR / "element_types.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(LibraryError, match="already exists"):
+        append_element_type(target, _sample_element_type("cladding_panel_alu_mw_25"))
+
+
+def test_append_element_type_writes_valid_yaml(tmp_path: Path) -> None:
+    target = tmp_path / "element_types.yaml"
+    target.write_text("element_types: []\n", encoding="utf-8")
+
+    append_element_type(target, _sample_element_type())
+
+    # The file is still well-formed YAML, not just text concatenation.
+    document = yaml.safe_load(target.read_text(encoding="utf-8"))
+    assert document["element_types"][0]["id"] == "test_brick"
