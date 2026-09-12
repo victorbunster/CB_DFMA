@@ -46,10 +46,32 @@ class ProjectResult:
     priority_error: str | None
 
 
-def evaluate_project(data_dir: Path, project_path: Path) -> ProjectResult:
+def list_option_ids(project_path: Path) -> list[str]:
+    """Every option id declared in a project file, sorted — so a caller
+    (gui.py's option selectors) can offer a pick list before running
+    anything.
+    """
+    return sorted(load_options(project_path))
+
+
+def evaluate_project(data_dir: Path, project_path: Path, option_ids: list[str] | None = None) -> ProjectResult:
+    """Run the assessment. By default every option in ``project_path`` is
+    evaluated together (unchanged behaviour). Pass ``option_ids`` (e.g.
+    exactly two) to restrict the run to those — useful once a project
+    file accumulates more than two options (CLAUDE.md's declared scope is
+    "two compared variants", and the ranking/rank-stability/IND-08
+    break-even machinery below is built around exactly two; selecting
+    down to two keeps that meaningful instead of silently going quiet
+    once a third option exists).
+    """
     library = Library.load(data_dir)
     rules = load_rules(data_dir / "rules.yaml")
     options = load_options(project_path)
+    if option_ids is not None:
+        missing = [oid for oid in option_ids if oid not in options]
+        if missing:
+            raise ValueError(f"{project_path}: no such option(s): {', '.join(missing)}")
+        options = {oid: options[oid] for oid in option_ids}
 
     evaluations = {
         option_id: run_engine(option_id, library, graph, rules, library.project_parameters)
@@ -102,9 +124,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="cdfma", description=__doc__)
     parser.add_argument("--project", type=Path, required=True, help="path to the project graph YAML (e.g. data/project_wall.yaml)")
     parser.add_argument("--data-dir", type=Path, default=Path("data"), help="directory holding the library YAML files (default: data)")
+    parser.add_argument(
+        "--option",
+        action="append",
+        dest="options",
+        metavar="OPTION_ID",
+        help="restrict the run to this option id; repeat to select more than one (e.g. --option a --option b). "
+        "Default: every option in the project file.",
+    )
     args = parser.parse_args(argv)
 
-    result = evaluate_project(args.data_dir, args.project)
+    result = evaluate_project(args.data_dir, args.project, option_ids=args.options)
 
     for option_id in sorted(result.evaluations):
         print(render_findings(result.evaluations[option_id]))

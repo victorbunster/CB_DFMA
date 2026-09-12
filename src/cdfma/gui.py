@@ -20,7 +20,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from pydantic import ValidationError
 
-from cdfma.cli import ProjectResult, evaluate_project
+from cdfma.cli import ProjectResult, evaluate_project, list_option_ids
 from cdfma.graph import GraphError
 from cdfma.graph import Graph as ProjectGraph
 from cdfma.graph import append_option
@@ -53,6 +53,8 @@ class App(tk.Tk):
         self._build_top_bar()
         self._build_notebook()
 
+    _ALL_OPTIONS = "(all options in file)"
+
     def _build_top_bar(self) -> None:
         bar = ttk.Frame(self, padding=8)
         bar.pack(fill="x")
@@ -67,8 +69,29 @@ class App(tk.Tk):
 
         ttk.Button(bar, text="Run assessment", command=self._run).grid(row=0, column=3, rowspan=2, padx=12)
 
+        # A project file can accumulate more than two options (via "Build
+        # wall"). Compare defaults to every option in the file, same as
+        # before this existed; pick exactly two here to narrow a run to
+        # them instead — that's also what keeps ranking/rank-stability/
+        # IND-08 break-even meaningful (they're built around a pair).
+        compare_bar = ttk.Frame(bar)
+        compare_bar.grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ttk.Label(compare_bar, text="Compare:").pack(side="left")
+        self.option_a_var = tk.StringVar(value=self._ALL_OPTIONS)
+        self.option_b_var = tk.StringVar(value=self._ALL_OPTIONS)
+        self.option_a_menu = ttk.Combobox(
+            compare_bar, textvariable=self.option_a_var, state="readonly", width=26, values=[self._ALL_OPTIONS]
+        )
+        self.option_a_menu.pack(side="left", padx=(6, 2))
+        ttk.Label(compare_bar, text="vs.").pack(side="left")
+        self.option_b_menu = ttk.Combobox(
+            compare_bar, textvariable=self.option_b_var, state="readonly", width=26, values=[self._ALL_OPTIONS]
+        )
+        self.option_b_menu.pack(side="left", padx=(2, 6))
+        ttk.Button(compare_bar, text="Load options", command=self._load_available_options).pack(side="left")
+
         self.status_var = tk.StringVar(value="Ready.")
-        ttk.Label(bar, textvariable=self.status_var, foreground="#555").grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ttk.Label(bar, textvariable=self.status_var, foreground="#555").grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
     def _build_notebook(self) -> None:
         self.notebook = ttk.Notebook(self)
@@ -138,9 +161,40 @@ class App(tk.Tk):
         if chosen:
             self.project_var.set(chosen)
 
+    def _load_available_options(self) -> None:
+        try:
+            available = list_option_ids(Path(self.project_var.get()))
+        except Exception as exc:  # noqa: BLE001 - reported, not fatal
+            messagebox.showerror("Could not list options", str(exc))
+            return
+        values = [self._ALL_OPTIONS, *available]
+        self.option_a_menu["values"] = values
+        self.option_b_menu["values"] = values
+        if self.option_a_var.get() not in values:
+            self.option_a_var.set(self._ALL_OPTIONS)
+        if self.option_b_var.get() not in values:
+            self.option_b_var.set(self._ALL_OPTIONS)
+        self.status_var.set(f"{len(available)} option(s) in file: {', '.join(available)}")
+
+    def _selected_option_ids(self) -> list[str] | None:
+        a, b = self.option_a_var.get(), self.option_b_var.get()
+        picked = [o for o in (a, b) if o and o != self._ALL_OPTIONS]
+        if not picked:
+            return None  # default: every option in the file, unchanged from before this existed
+        if len(picked) == 1:
+            raise ValueError("pick an option for both Compare fields, or leave both as \"(all options in file)\"")
+        if a == b:
+            raise ValueError("Compare's two fields must be different options")
+        return picked
+
     def _run(self) -> None:
         try:
-            self._result = evaluate_project(Path(self.data_dir_var.get()), Path(self.project_var.get()))
+            selected = self._selected_option_ids()
+        except ValueError as exc:
+            messagebox.showerror("Invalid selection", str(exc))
+            return
+        try:
+            self._result = evaluate_project(Path(self.data_dir_var.get()), Path(self.project_var.get()), option_ids=selected)
         except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
             messagebox.showerror("Assessment failed", f"{exc}\n\n{traceback.format_exc()}")
             self.status_var.set(f"Failed: {exc}")

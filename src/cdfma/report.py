@@ -76,6 +76,13 @@ connection type by hand (spec §6). Saving adds it to element_types.yaml /
 connection_types.yaml, but it won't appear in a run until an Instance or
 ConnectionInstance in your project file also references its id.
 
+A project file can hold more than two options (each "Build wall" adds
+one). "Compare" in the sidebar defaults to every option in the file, same
+as always; click "Load options" and pick two there to narrow a run to
+just that pair — which is also what keeps ranking, the rank-stability
+check, and IND-08 break-even meaningful, since spec §1 declares "two
+compared variants" and that machinery is built around a pair.
+
 Use "Build wall" to assemble those into a new option (project graph):
 add instance rows (each names an element type), then connection rows
 (each names a connection type and the element_instance_id/host_instance_id
