@@ -1,12 +1,15 @@
-"""Findings, option-comparison and gap report renderers (spec §5.1 step 7,
-§6), plus a shared reference legend. Plain text, deterministic (sorted,
-no dict-order or wall-clock dependence — CLAUDE.md §8), no logic beyond
-formatting what the engine and priority layer already computed.
+"""Findings, option-comparison, gap-report and composition renderers
+(spec §5.1 step 7, §6), plus a shared reference legend. Plain text,
+deterministic (sorted, no dict-order or wall-clock dependence — CLAUDE.md
+§8), no logic beyond formatting what the engine, priority layer, library
+and graph already hold.
 """
 
 from __future__ import annotations
 
 from cdfma.engine import EvaluationResult
+from cdfma.graph import Graph
+from cdfma.library import Library
 from cdfma.priority import RankingResult, RankStabilityResult
 from cdfma.schema import Finding, Gap, TradeOff
 
@@ -90,6 +93,12 @@ pair it joins — matching the ids used in the instance rows). Saving adds
 the option to whichever project file is named there — a new file is
 created if it doesn't exist yet. Set Project file to that path and click
 Run assessment to see it.
+
+The "Composition" tab lists what each run option is actually made of —
+every instance's element type and materials, every connection's type and
+which instance it joins to which — straight from the library and graph,
+with no rule applied. Findings is what follows from that; Composition is
+what was declared in the first place.
 """
 
 
@@ -219,5 +228,68 @@ def render_comparison(
         lines.append("--- IND-08: break-even of reversibility ---")
         for metric, year in sorted(break_evens.items()):
             lines.append(f"  {metric} break-even: {'year ' + str(year) if year is not None else 'none within study period'}")
+
+    return "\n".join(lines)
+
+
+_COMPOSITION_NOTE = (
+    "What each option is made of — the library facts behind every instance\n"
+    "and connection, not a derived judgement (see Findings for DRV-01\n"
+    "reversibility, DRV-05 replacement counts, and the rest)."
+)
+
+
+def _instance_line(instance_id: str, label: str, element_type) -> str:
+    header = f"  {instance_id}"
+    if label:
+        header += f" ({label})"
+    header += f"  {element_type.id} — {element_type.name!r}"
+    composition = ", ".join(f"{e.material} {e.mass_fraction:.0%}" for e in element_type.composition)
+    return (
+        f"{header}\n"
+        f"      layer={element_type.layer}  tier={element_type.tier}  "
+        f"service_life={element_type.service_life}y  mass={element_type.mass}kg\n"
+        f"      composition: {composition}"
+    )
+
+
+def _connection_line(connection_id: str, connection, connection_type) -> str:
+    return (
+        f"  {connection_id}  {connection_type.id} — {connection_type.name!r}\n"
+        f"      {connection.element_instance_id} -> {connection.host_instance_id} (element -> host)\n"
+        f"      removal_method={connection_type.removal_method}  "
+        f"damage_to_self={connection_type.damage_to_self}  "
+        f"damage_to_host={connection_type.damage_to_host}  "
+        f"re_installable={connection_type.re_installable}"
+    )
+
+
+def render_composition(options: dict[str, Graph], library: Library) -> str:
+    """One section per option: its instances (id, element type, and that
+    element type's own facts) and its connections (id, connection type,
+    which instance it joins to which). Facts only, straight from the
+    library and graph layers — spec §2.5/§2.1.
+    """
+    lines = ["=== Composition ===", _COMPOSITION_NOTE]
+    for option_id in sorted(options):
+        graph = options[option_id]
+        lines.append("")
+        lines.append(f"--- {option_id} ---")
+
+        lines.append("Instances:")
+        if not graph.instances:
+            lines.append("  (none)")
+        for instance_id in sorted(graph.instances):
+            instance = graph.instances[instance_id]
+            element_type = library.get_element_type(instance.element_type_id)
+            lines.append(_instance_line(instance_id, instance.label, element_type))
+
+        lines.append("Connections:")
+        if not graph.connection_instances:
+            lines.append("  (none)")
+        for connection_id in sorted(graph.connection_instances):
+            connection = graph.connection_instances[connection_id]
+            connection_type = library.get_connection_type(connection.connection_type_id)
+            lines.append(_connection_line(connection_id, connection, connection_type))
 
     return "\n".join(lines)

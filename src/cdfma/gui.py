@@ -25,7 +25,7 @@ from cdfma.graph import GraphError
 from cdfma.graph import Graph as ProjectGraph
 from cdfma.graph import append_option
 from cdfma.library import Library, LibraryError, append_connection_type, append_element_type
-from cdfma.report import LEGEND, render_comparison, render_findings, render_gap_report
+from cdfma.report import LEGEND, render_comparison, render_composition, render_findings, render_gap_report
 from cdfma.schema import (
     CompositionEntry,
     ConnectionInstance,
@@ -111,6 +111,10 @@ class App(tk.Tk):
         self.option_menu.pack(side="left", padx=6)
         self.option_menu.bind("<<ComboboxSelected>>", lambda _e: self._render_findings())
         self.findings_text = self._make_text(findings_tab)
+
+        composition_tab = ttk.Frame(self.notebook)
+        self.notebook.add(composition_tab, text="Composition")
+        self.composition_text = self._make_text(composition_tab)
 
         comparison_tab = ttk.Frame(self.notebook)
         self.notebook.add(comparison_tab, text="Option comparison")
@@ -205,6 +209,7 @@ class App(tk.Tk):
         if option_ids:
             self.option_var.set(option_ids[0])
         self._render_findings()
+        self._render_composition()
         self._render_gap_report()
         self._render_comparison()
         self.status_var.set(f"Ran {len(option_ids)} option(s) from {self.project_var.get()!r}.")
@@ -214,6 +219,11 @@ class App(tk.Tk):
             return
         evaluation = self._result.evaluations[self.option_var.get()]
         self._set_text(self.findings_text, render_findings(evaluation))
+
+    def _render_composition(self) -> None:
+        if self._result is None:
+            return
+        self._set_text(self.composition_text, render_composition(self._result.options, self._result.library))
 
     def _render_gap_report(self) -> None:
         if self._result is None:

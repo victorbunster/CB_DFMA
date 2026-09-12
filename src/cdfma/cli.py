@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cdfma.engine import EvaluationResult, break_even_year, run_engine
-from cdfma.graph import load_options
+from cdfma.graph import Graph, load_options
 from cdfma.library import Library
 from cdfma.priority import (
     ConstraintResult,
@@ -29,13 +29,14 @@ from cdfma.priority import (
 )
 from cdfma.priority import rank as rank_options
 from cdfma.priority import rank_stability_check
-from cdfma.report import render_comparison, render_findings, render_gap_report
+from cdfma.report import render_comparison, render_composition, render_findings, render_gap_report
 from cdfma.rules import load_rules
 
 
 @dataclass
 class ProjectResult:
     library: Library
+    options: dict[str, Graph]
     evaluations: dict[str, EvaluationResult]
     profile: Profile | None
     constraint_result: ConstraintResult | None
@@ -109,6 +110,7 @@ def evaluate_project(data_dir: Path, project_path: Path, option_ids: list[str] |
 
     return ProjectResult(
         library=library,
+        options=options,
         evaluations=evaluations,
         profile=profile,
         constraint_result=constraint_result,
@@ -141,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
         print()
 
     print(render_gap_report(list(result.evaluations.values())))
+    print()
+
+    print(render_composition(result.options, result.library))
     print()
 
     if result.priority_error:
