@@ -21,6 +21,67 @@ from tkinter import filedialog, messagebox, ttk
 from cdfma.cli import ProjectResult, evaluate_project
 from cdfma.report import render_comparison, render_findings, render_gap_report
 
+# Static reference text only — no computation, no domain content beyond
+# what data/rules.yaml and mvp-scope.md §3.2 already declare. Kept here
+# rather than in report.py since it isn't one of that module's three
+# renderers (findings/comparison/gap), just UI reference text.
+LEGEND = """\
+INDICATORS (spec §3.2)
+
+IND-01  Mass fraction recoverable at component tier.
+        This build: decomposable-mass proxy (DRV-02, the full
+        highest-recoverable-tier test, is out of scope for Slice 1).
+IND-02  Fraction of connections reversible (per DRV-01).
+IND-05  Upfront embodied GHG, A1-A5, per m² of assembly.
+IND-06  Lifecycle embodied GHG over the study period, including
+        replacement cycles and end-of-life (C). Module D (benefits
+        beyond the system boundary) is reported separately
+        ("IND-06_ghg_D") and never summed in.
+IND-07  Lifecycle cost over the study period: capital, replacement,
+        removal, less residual value. Shown undiscounted
+        ("IND-07_undiscounted") and at each declared rate
+        ("IND-07@<rate>").
+IND-08  Break-even of reversibility: the year a reversible option's
+        higher upfront cost/GHG is repaid by avoided replacement.
+        Carbon and cost break-even are reported separately — they
+        frequently disagree, and that disagreement is the finding.
+
+Not implemented (out of scope, need the interface layer): IND-03
+(interface diversity), IND-04 (transport density).
+
+An indicator shown as "indistinguishable" on a ranking dimension means
+two options' values overlap within their combined data uncertainty
+band — a fact about the data, not a preference (kept separate from the
+priority profile's own indifference band).
+
+RULES (spec §3.2) — the rule id shown on each finding
+
+Derivations (always report a value):
+  DRV-01  Reversibility, from removal method + damage expectation.
+  DRV-04  Handling class: one-person / two-person / mechanical.
+  DRV-05  Replacement count over the study period.
+  DRV-06  Cascading replacement: a host forced to replace on its
+          element's shorter cycle.
+  DRV-07  Lifecycle GHG and cost.
+
+Criteria (fire only when their condition is met):
+  CON-001  Irreversible joint across a service-life differential
+           above threshold.
+  CON-003  Recovery not worth doing (removal cost/GHG exceeds credit).
+  REC-001  Declared recovery pathway contradicted by the installed
+           connection.
+  SEP-001  Not decomposable with multiple materials — not separable
+           at end of life.
+  DFM-001  DfMA part-count saving opposing a circularity criterion —
+           produces a TRADE-OFF where it opposes CON-001.
+
+[PROVISIONAL] on a finding means it derives from an archetype, a
+generic factor, or an estimate, per the data's own DataQuality record.
+
+Several logic thresholds and some library facts are PLACEHOLDER values,
+not real data — see docs/open-questions.md.
+"""
+
 
 class App(tk.Tk):
     def __init__(self) -> None:
@@ -56,6 +117,11 @@ class App(tk.Tk):
     def _build_notebook(self) -> None:
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        legend_tab = ttk.Frame(self.notebook)
+        self.notebook.add(legend_tab, text="Legend")
+        legend_text = self._make_text(legend_tab)
+        self._set_text(legend_text, LEGEND)
 
         findings_tab = ttk.Frame(self.notebook)
         self.notebook.add(findings_tab, text="Findings")
