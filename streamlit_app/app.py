@@ -161,7 +161,7 @@ def _trajectory_chart(
     )
     return line + rule
 
-st.set_page_config(page_title="Circular DfMA — Slice 1", layout="wide")
+st.set_page_config(page_title="Circular DfMA — MVP v1", layout="wide")
 
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
 DEFAULT_PROJECT = REPO_ROOT / "data" / "project_wall.yaml"
@@ -188,7 +188,7 @@ def _optional_float(raw: str) -> float | None:
 
 # --- sidebar: run controls ------------------------------------------------
 
-st.title("Circular DfMA — Slice 1")
+st.title("Circular DfMA — MVP v1")
 
 def _selected_option_ids(option_a: str, option_b: str) -> list[str] | None:
     """Mirrors gui.py's method of the same name. Returns None (run every
