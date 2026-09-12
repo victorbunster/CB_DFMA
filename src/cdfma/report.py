@@ -75,6 +75,14 @@ Use "Add material" / "Add connection" to enter a new element type or
 connection type by hand (spec §6). Saving adds it to element_types.yaml /
 connection_types.yaml, but it won't appear in a run until an Instance or
 ConnectionInstance in your project file also references its id.
+
+Use "Build wall" to assemble those into a new option (project graph):
+add instance rows (each names an element type), then connection rows
+(each names a connection type and the element_instance_id/host_instance_id
+pair it joins — matching the ids used in the instance rows). Saving adds
+the option to whichever project file is named there — a new file is
+created if it doesn't exist yet. Set Project file to that path and click
+Run assessment to see it.
 """
 
 

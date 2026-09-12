@@ -15,6 +15,7 @@ there is only one kind.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import NamedTuple
 
@@ -207,3 +208,87 @@ def load_options(path: Path) -> dict[str, Graph]:
     for option_id, raw_graph in raw_options.items():
         options[option_id] = _parse_graph(raw_graph or {}, f"{path}:options.{option_id}")
     return options
+
+
+# An empty flow-style options mapping ("options: {}") cannot be followed
+# by a block-style key on the next line, same issue as library.py's
+# equivalent for element/connection types.
+_EMPTY_FLOW_OPTIONS = re.compile(r"^(options:)[ \t]*\{[ \t]*\}[ \t]*$", re.MULTILINE)
+
+
+def append_option(path: Path, option_id: str, graph: Graph) -> None:
+    """Add one new option (a named project graph) to a project file's
+    top-level ``options:`` mapping — the manual graph-building path for
+    ``gui.py``'s "Build wall" tab.
+
+    Like ``library.py``'s ``append_element_type``/``append_connection_type``,
+    this inserts the new block as text rather than re-serializing the
+    whole file, so hand-written comments survive untouched. ``options:``
+    is a mapping, not a list, so unlike those two the insertion point is
+    "immediately before the next top-level key, or end of file" — found
+    by scanning the raw text, not assumed from a fixed layout.
+
+    Creates ``path`` with a bare ``options:`` mapping if it doesn't exist
+    yet, rather than requiring it to be pre-seeded.
+
+    Raises ``GraphError`` if ``option_id`` already exists in the file.
+    Does not validate ``graph`` against a ``Library`` — call
+    ``graph.validate_against_library`` first if that matters to the
+    caller (it does for ``gui.py``, which does so before calling this).
+    """
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        try:
+            document = yaml.safe_load(text) or {}
+        except yaml.YAMLError as exc:
+            raise GraphError(f"{path}: invalid YAML: {exc}") from exc
+        if not isinstance(document, dict) or "options" not in document:
+            raise GraphError(f"{path}: expected a top-level 'options' mapping")
+        existing_options = document["options"] or {}
+        if option_id in existing_options:
+            raise GraphError(f"{path}: option id {option_id!r} already exists")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = "options:\n"
+
+    match = _EMPTY_FLOW_OPTIONS.search(text)
+    if match is not None:
+        text = text[: match.start()] + "options:" + text[match.end() :]
+
+    option_dict = {
+        "instances": [
+            {"id": instance.id, "element_type_id": instance.element_type_id, "label": instance.label}
+            for instance in sorted(graph.instances.values(), key=lambda i: i.id)
+        ],
+        "connection_instances": [
+            {
+                "id": connection.id,
+                "connection_type_id": connection.connection_type_id,
+                "element_instance_id": connection.element_instance_id,
+                "host_instance_id": connection.host_instance_id,
+            }
+            for connection in sorted(graph.connection_instances.values(), key=lambda c: c.id)
+        ],
+        "composition_edges": [
+            {"parent_instance_id": edge.parent_instance_id, "child_instance_id": edge.child_instance_id}
+            for edge in graph.composition_edges
+        ],
+        "dependency_edges": [
+            {"dependent_instance_id": edge.dependent_instance_id, "blocking_instance_id": edge.blocking_instance_id}
+            for edge in graph.dependency_edges
+        ],
+    }
+    block = yaml.safe_dump(
+        {option_id: option_dict}, default_flow_style=False, sort_keys=False, allow_unicode=True
+    )
+    indented = "\n".join(("  " + line if line else line) for line in block.splitlines())
+
+    options_match = re.search(r"^options:[ \t]*$", text, re.MULTILINE)
+    if options_match is None:
+        raise GraphError(f"{path}: expected a top-level 'options:' line")
+    search_from = options_match.end()
+    next_top_level = re.search(r"^[A-Za-z_][A-Za-z0-9_]*:", text[search_from:], re.MULTILINE)
+    insertion_point = search_from + next_top_level.start() if next_top_level else len(text)
+
+    new_text = text[:insertion_point] + indented + "\n\n" + text[insertion_point:]
+    path.write_text(new_text, encoding="utf-8")

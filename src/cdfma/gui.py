@@ -21,17 +21,23 @@ from tkinter import filedialog, messagebox, ttk
 from pydantic import ValidationError
 
 from cdfma.cli import ProjectResult, evaluate_project
-from cdfma.library import LibraryError, append_connection_type, append_element_type
+from cdfma.graph import GraphError
+from cdfma.graph import Graph as ProjectGraph
+from cdfma.graph import append_option
+from cdfma.library import Library, LibraryError, append_connection_type, append_element_type
 from cdfma.report import LEGEND, render_comparison, render_findings, render_gap_report
 from cdfma.schema import (
     CompositionEntry,
+    ConnectionInstance,
     ConnectionType,
     DataQuality,
     ElementCost,
     ElementType,
     EmbodiedGHG,
     Envelope,
+    Instance,
 )
+
 
 class App(tk.Tk):
     def __init__(self) -> None:
@@ -98,6 +104,10 @@ class App(tk.Tk):
         add_connection_tab = ttk.Frame(self.notebook)
         self.notebook.add(add_connection_tab, text="Add connection")
         self._build_add_connection_type_tab(add_connection_tab)
+
+        build_wall_tab = ttk.Frame(self.notebook)
+        self.notebook.add(build_wall_tab, text="Build wall")
+        self._build_wall_tab(build_wall_tab)
 
     def _make_text(self, parent: ttk.Frame) -> tk.Text:
         frame = ttk.Frame(parent)
@@ -564,6 +574,205 @@ class App(tk.Tk):
             f"{connection_type.id} — add one, then click Run assessment.",
         )
         self.add_connection_status_var.set(f"Saved {connection_type.id!r} to {path}.")
+
+    # --- "Build wall" tab: manual entry of a new option (project graph) -
+    #
+    # A form only, same invariant as the two tabs above: it collects
+    # instance and connection rows, constructs real schema.Instance /
+    # ConnectionInstance / graph.Graph objects (which do the actual
+    # validation — id format, no dangling references, no self-referential
+    # connection), and hands the result to graph.append_option.
+
+    def _build_wall_tab(self, parent: ttk.Frame) -> None:
+        form = self._make_scrollable_form(parent)
+
+        target_frame = self._form_section(form, "Target")
+        wv: dict[str, tk.Variable] = {}
+        self._form_row(target_frame, wv, "project file", "wall_target", default=self.project_var.get())
+        self._form_row(target_frame, wv, "new option id (snake_case)", "wall_option_id")
+        self._wall_vars = wv
+
+        library_bar = ttk.Frame(form)
+        library_bar.pack(fill="x", pady=(0, 10))
+        ttk.Button(library_bar, text="Reload element/connection type ids", command=self._reload_wall_library_ids).pack(
+            side="left"
+        )
+        self.wall_library_status_var = tk.StringVar(value="")
+        ttk.Label(library_bar, textvariable=self.wall_library_status_var, foreground="#555").pack(
+            side="left", padx=10
+        )
+
+        instances_section = self._form_section(form, "Instances (each is one occurrence of an element type)")
+        self._wall_instances_frame = ttk.Frame(instances_section)
+        self._wall_instances_frame.pack(fill="x")
+        self._wall_instance_rows: list[dict] = []
+        header = ttk.Frame(instances_section)
+        header.pack(fill="x")
+        for text, width in (("instance id", 16), ("element_type_id", 30), ("label (optional)", 20)):
+            ttk.Label(header, text=text, width=width, anchor="w").pack(side="left", padx=(0, 4))
+        self._add_wall_instance_row()
+        ttk.Button(instances_section, text="+ Add instance row", command=self._add_wall_instance_row).pack(
+            anchor="w", pady=(4, 0)
+        )
+
+        connections_section = self._form_section(
+            form, "Connections (element_instance_id / host_instance_id must match instance ids above)"
+        )
+        self._wall_connections_frame = ttk.Frame(connections_section)
+        self._wall_connections_frame.pack(fill="x")
+        self._wall_connection_rows: list[dict] = []
+        header = ttk.Frame(connections_section)
+        header.pack(fill="x")
+        for text, width in (
+            ("connection id", 14),
+            ("connection_type_id", 24),
+            ("element_instance_id", 16),
+            ("host_instance_id", 16),
+        ):
+            ttk.Label(header, text=text, width=width, anchor="w").pack(side="left", padx=(0, 4))
+        ttk.Button(
+            connections_section, text="+ Add connection row", command=self._add_wall_connection_row
+        ).pack(anchor="w", pady=(4, 0))
+
+        button_bar = ttk.Frame(form)
+        button_bar.pack(fill="x", pady=(4, 0))
+        ttk.Button(button_bar, text="Save wall", command=self._save_wall).pack(side="left")
+        self.wall_status_var = tk.StringVar(value="")
+        ttk.Label(button_bar, textvariable=self.wall_status_var, foreground="#555").pack(side="left", padx=10)
+
+        self._wall_element_type_ids: list[str] = []
+        self._wall_connection_type_ids: list[str] = []
+        self._reload_wall_library_ids()
+
+    def _reload_wall_library_ids(self) -> None:
+        try:
+            library = Library.load(Path(self.data_dir_var.get()))
+        except Exception as exc:  # noqa: BLE001 - reported, not fatal
+            self.wall_library_status_var.set(f"Could not load library: {exc}")
+            return
+        self._wall_element_type_ids = sorted(library.element_types)
+        self._wall_connection_type_ids = sorted(library.connection_types)
+        for row in self._wall_instance_rows:
+            row["element_type_combo"].configure(values=self._wall_element_type_ids)
+        for row in self._wall_connection_rows:
+            row["connection_type_combo"].configure(values=self._wall_connection_type_ids)
+        self.wall_library_status_var.set(
+            f"{len(self._wall_element_type_ids)} element type(s), {len(self._wall_connection_type_ids)} connection type(s) loaded."
+        )
+
+    def _add_wall_instance_row(self) -> None:
+        record: dict = {}
+        frame = ttk.Frame(self._wall_instances_frame)
+        frame.pack(fill="x", pady=2)
+        id_var = tk.StringVar()
+        element_type_var = tk.StringVar()
+        label_var = tk.StringVar()
+        ttk.Entry(frame, textvariable=id_var, width=16).pack(side="left", padx=(0, 4))
+        combo = ttk.Combobox(frame, textvariable=element_type_var, values=getattr(self, "_wall_element_type_ids", []), width=28)
+        combo.pack(side="left", padx=(0, 4))
+        ttk.Entry(frame, textvariable=label_var, width=20).pack(side="left", padx=(0, 4))
+        ttk.Button(frame, text="Remove", command=lambda: self._remove_wall_instance_row(record)).pack(side="left")
+        record.update(frame=frame, id_var=id_var, element_type_var=element_type_var, label_var=label_var, element_type_combo=combo)
+        self._wall_instance_rows.append(record)
+
+    def _remove_wall_instance_row(self, record: dict) -> None:
+        if len(self._wall_instance_rows) <= 1:
+            return
+        record["frame"].destroy()
+        self._wall_instance_rows.remove(record)
+
+    def _add_wall_connection_row(self) -> None:
+        record: dict = {}
+        frame = ttk.Frame(self._wall_connections_frame)
+        frame.pack(fill="x", pady=2)
+        id_var = tk.StringVar()
+        connection_type_var = tk.StringVar()
+        element_instance_var = tk.StringVar()
+        host_instance_var = tk.StringVar()
+        ttk.Entry(frame, textvariable=id_var, width=14).pack(side="left", padx=(0, 4))
+        combo = ttk.Combobox(
+            frame, textvariable=connection_type_var, values=getattr(self, "_wall_connection_type_ids", []), width=22
+        )
+        combo.pack(side="left", padx=(0, 4))
+        ttk.Entry(frame, textvariable=element_instance_var, width=16).pack(side="left", padx=(0, 4))
+        ttk.Entry(frame, textvariable=host_instance_var, width=16).pack(side="left", padx=(0, 4))
+        ttk.Button(frame, text="Remove", command=lambda: self._remove_wall_connection_row(record)).pack(side="left")
+        record.update(
+            frame=frame,
+            id_var=id_var,
+            connection_type_var=connection_type_var,
+            element_instance_var=element_instance_var,
+            host_instance_var=host_instance_var,
+            connection_type_combo=combo,
+        )
+        self._wall_connection_rows.append(record)
+
+    def _remove_wall_connection_row(self, record: dict) -> None:
+        record["frame"].destroy()
+        self._wall_connection_rows.remove(record)
+
+    def _save_wall(self) -> None:
+        wv = self._wall_vars
+        target_path = Path(wv["wall_target"].get().strip())
+        option_id = wv["wall_option_id"].get().strip()
+
+        try:
+            if not option_id:
+                raise ValueError("a new option id is required")
+
+            instances: dict[str, Instance] = {}
+            for row in self._wall_instance_rows:
+                instance_id = row["id_var"].get().strip()
+                element_type_id = row["element_type_var"].get().strip()
+                if not instance_id and not element_type_id:
+                    continue
+                instance = Instance(id=instance_id, element_type_id=element_type_id, label=row["label_var"].get())
+                if instance.id in instances:
+                    raise ValueError(f"duplicate instance id {instance.id!r}")
+                instances[instance.id] = instance
+            if not instances:
+                raise ValueError("at least one instance is required")
+
+            connection_instances: dict[str, ConnectionInstance] = {}
+            for row in self._wall_connection_rows:
+                connection_id = row["id_var"].get().strip()
+                connection_type_id = row["connection_type_var"].get().strip()
+                if not connection_id and not connection_type_id:
+                    continue
+                connection = ConnectionInstance(
+                    id=connection_id,
+                    connection_type_id=connection_type_id,
+                    element_instance_id=row["element_instance_var"].get().strip(),
+                    host_instance_id=row["host_instance_var"].get().strip(),
+                )
+                if connection.id in connection_instances:
+                    raise ValueError(f"duplicate connection instance id {connection.id!r}")
+                connection_instances[connection.id] = connection
+
+            graph = ProjectGraph(
+                instances=instances,
+                connection_instances=connection_instances,
+                composition_edges=[],
+                dependency_edges=[],
+            )
+            library = Library.load(Path(self.data_dir_var.get()))
+            graph.validate_against_library(library)
+        except (ValidationError, ValueError, TypeError, GraphError, LibraryError) as exc:
+            messagebox.showerror("Invalid wall", str(exc))
+            return
+
+        try:
+            append_option(target_path, option_id, graph)
+        except GraphError as exc:
+            messagebox.showerror("Could not save", str(exc))
+            return
+
+        messagebox.showinfo(
+            "Saved",
+            f"Added option {option_id!r} ({len(instances)} instance(s), {len(connection_instances)} "
+            f"connection(s)) to {target_path}.\n\nSet Project file to this path and click Run assessment to see it.",
+        )
+        self.wall_status_var.set(f"Saved {option_id!r} to {target_path}.")
 
 
 def main() -> int:
