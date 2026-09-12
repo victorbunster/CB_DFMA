@@ -202,21 +202,29 @@ def instance_lifecycle(
 
 def assembly_reference_area_m2(library: Library, graph: Graph) -> float:
     """The assembly's reference area for "per m²" indicators (IND-05/06/07):
-    the summed face area of every skin-layer instance. Spec §5.4 defines
-    per-m² resolution for a single element's own figure but not an
-    assembly-wide reference area for multi-instance graphs; the skin layer
-    is used here since it is what "per m² of assembly" conventionally
-    means for a wall build-up (spec §1). Documented design decision, not
-    spec text.
+    the largest face area among the graph's skin-layer instances. Spec
+    §5.4 defines per-m² resolution for a single element's own figure but
+    not an assembly-wide reference area for multi-instance graphs; the
+    skin layer is used here since it is what "per m² of assembly"
+    conventionally means for a wall build-up (spec §1).
+
+    Uses ``max``, not a sum, deliberately: a real wall's skin is usually
+    several layers (cladding, membrane, insulation, …) covering the same
+    footprint, not additional area stacked on top of each other — so
+    summing every skin-layer instance's own face area would inflate the
+    denominator once a graph has more than one. For a graph with exactly
+    one skin-layer instance (as in Slice 1's original two-option fixture)
+    this is identical to summing, so existing figures are unaffected.
+    Documented design decision, not spec text.
     """
     from cdfma.normalise import face_area_m2
 
-    total = 0.0
-    for instance in graph.instances.values():
-        element_type = library.get_element_type(instance.element_type_id)
-        if element_type.layer == "skin":
-            total += face_area_m2(element_type)
-    return total
+    areas = [
+        face_area_m2(library.get_element_type(instance.element_type_id))
+        for instance in graph.instances.values()
+        if library.get_element_type(instance.element_type_id).layer == "skin"
+    ]
+    return max(areas, default=0.0)
 
 
 def _bind_env(rule: RuleDef, subject, library: Library, graph: Graph) -> dict:

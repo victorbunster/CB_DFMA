@@ -478,7 +478,7 @@ def dfm_001_dfma_opposes_circularity(
     if is_reversible(connection_type) or differential <= threshold:
         return None
 
-    capital_saving = connection_type.ghg_A1A3 + connection_type.ghg_A5
+    capital_saving = round(connection_type.ghg_A1A3 + connection_type.ghg_A5, 6)
     return _finding(
         context,
         subject.id,

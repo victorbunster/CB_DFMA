@@ -1,0 +1,128 @@
+# A second, richer project graph — demonstrates the demo dataset added to
+# element_types.yaml / connection_types.yaml (docs/open-questions.md #9)
+# in an actual six-instance wall build-up: structure (frame), cavity
+# battens, weather membrane, cavity insulation, cladding, and an internal
+# lining. Kept as its own file rather than folded into project_wall.yaml
+# so that file's exact two-option comparison (matching
+# docs/worked-example.md, and what tests/test_acceptance.py checks
+# figure-for-figure) is untouched.
+#
+# Load it explicitly:
+#   python -m cdfma.cli --project data/project_wall_demo.yaml
+#
+# Both options share the same six instances and four of five joints; only
+# the cladding-to-battens fixing differs (adhesive_bond vs
+# mechanical_bracket) — the same single-fact-change pattern as
+# project_wall.yaml's two options, now inside a larger graph. That joint
+# also drives a DRV-06 cascade in option_full_buildup_bonded: the battens
+# (their own 40-year cycle) are forced onto the cladding's 25-year cycle,
+# same story as project_wall.yaml's cladding/substrate pair, just against
+# a different host.
+
+options:
+  option_full_buildup_bonded:
+    instances:
+      - id: frame_1
+        element_type_id: timber_stud_frame_60
+        label: "Timber stud frame, bay 1"
+      - id: battens_1
+        element_type_id: timber_battens_40
+        label: "Cavity battens, bay 1"
+      - id: membrane_1
+        element_type_id: weatherproof_membrane_20
+        label: "Breather membrane, bay 1"
+      - id: insulation_1
+        element_type_id: mineral_wool_insulation_40
+        label: "Cavity insulation, bay 1"
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+        label: "Cladding panel, bay 1"
+      - id: lining_1
+        element_type_id: plasterboard_lining_30
+        label: "Internal lining, bay 1"
+    connection_instances:
+      - id: battens_to_frame
+        connection_type_id: nail_fixing_timber
+        element_instance_id: battens_1
+        host_instance_id: frame_1
+      - id: membrane_to_frame
+        connection_type_id: staple_fixing
+        element_instance_id: membrane_1
+        host_instance_id: frame_1
+      - id: insulation_to_frame
+        connection_type_id: mechanical_bracket
+        element_instance_id: insulation_1
+        host_instance_id: frame_1
+      - id: lining_to_frame
+        connection_type_id: screw_fixing_metal
+        element_instance_id: lining_1
+        host_instance_id: frame_1
+      - id: cladding_to_battens
+        connection_type_id: adhesive_bond
+        element_instance_id: cladding_1
+        host_instance_id: battens_1
+    composition_edges: []
+    dependency_edges: []
+
+  option_full_buildup_mechanical:
+    instances:
+      - id: frame_1
+        element_type_id: timber_stud_frame_60
+        label: "Timber stud frame, bay 1"
+      - id: battens_1
+        element_type_id: timber_battens_40
+        label: "Cavity battens, bay 1"
+      - id: membrane_1
+        element_type_id: weatherproof_membrane_20
+        label: "Breather membrane, bay 1"
+      - id: insulation_1
+        element_type_id: mineral_wool_insulation_40
+        label: "Cavity insulation, bay 1"
+      - id: cladding_1
+        element_type_id: cladding_panel_alu_mw_25
+        label: "Cladding panel, bay 1"
+      - id: lining_1
+        element_type_id: plasterboard_lining_30
+        label: "Internal lining, bay 1"
+    connection_instances:
+      - id: battens_to_frame
+        connection_type_id: nail_fixing_timber
+        element_instance_id: battens_1
+        host_instance_id: frame_1
+      - id: membrane_to_frame
+        connection_type_id: staple_fixing
+        element_instance_id: membrane_1
+        host_instance_id: frame_1
+      - id: insulation_to_frame
+        connection_type_id: mechanical_bracket
+        element_instance_id: insulation_1
+        host_instance_id: frame_1
+      - id: lining_to_frame
+        connection_type_id: screw_fixing_metal
+        element_instance_id: lining_1
+        host_instance_id: frame_1
+      - id: cladding_to_battens
+        connection_type_id: mechanical_bracket
+        element_instance_id: cladding_1
+        host_instance_id: battens_1
+    composition_edges: []
+    dependency_edges: []
+
+priority:
+  constraints:
+    # PLACEHOLDER, same status as project_wall.yaml's — no number is
+    # given anywhere in the source docs for a capital-cost cap; set high
+    # enough here not to exclude either option outright (a six-instance
+    # graph's undiscounted lifecycle total is well above the two-instance
+    # fixture's), since the point of this file is to compare them, not
+    # filter them out before comparison.
+    - indicator_id: IND-07_undiscounted
+      comparator: "<="
+      threshold: 8000
+  targets:
+    - indicator_id: IND-01
+      comparator: ">="
+      threshold: 0.8
+  profile:
+    dimensions: [IND-07_undiscounted, IND-02, IND-01]
+    indifference_band: 0.05

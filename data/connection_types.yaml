@@ -10,6 +10,10 @@
 # still requires one, so these are clearly-labeled PLACEHOLDER values
 # (per the user's explicit choice — see the conversation and
 # docs/open-questions.md #1), not real citations.
+#
+# screw_fixing_metal through rivet_fixing_aluminium (below
+# mechanical_bracket) are a demo dataset, entirely illustrative — see
+# docs/open-questions.md #9.
 
 connection_types:
   - id: adhesive_bond
@@ -64,3 +68,113 @@ connection_types:
       geography: AU
       uncertainty: "±25%"
       basis_note: "PLACEHOLDER - see docs/open-questions.md #1"
+
+  # --- Demo dataset (docs/open-questions.md #9) — every figure below is
+  # illustrative, not sourced. Spans a wider reversibility/damage range
+  # than the original two, to give trade-offs something to compare.
+
+  - id: screw_fixing_metal
+    name: "Screw fixing, metal"
+    removal_method: unscrew
+    damage_to_self: none
+    damage_to_host: minor
+    re_installable: true
+    tolerance_absorbed: 3
+    reuse_cycles: 8
+    ghg_A1A3: 0.8
+    ghg_A5: 0.2
+    ghg_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±30%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+    cost_install: 6
+    cost_removal: 4
+    cost_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±30%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+
+  - id: nail_fixing_timber
+    name: "Nail fixing, timber"
+    removal_method: punch_out
+    damage_to_self: minor
+    damage_to_host: minor
+    re_installable: true
+    tolerance_absorbed: 1
+    reuse_cycles: 2
+    ghg_A1A3: 0.3
+    ghg_A5: 0.1
+    ghg_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±30%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+    cost_install: 3
+    cost_removal: 4
+    cost_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±30%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+
+  - id: staple_fixing
+    name: "Staple fixing (membrane)"
+    removal_method: pry_out
+    damage_to_self: major
+    damage_to_host: minor
+    re_installable: false
+    reuse_cycles: 0
+    ghg_A1A3: 0.1
+    ghg_A5: 0.05
+    ghg_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±35%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+    cost_install: 2
+    cost_removal: 3
+    cost_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±35%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+
+  - id: rivet_fixing_aluminium
+    name: "Rivet fixing, aluminium"
+    removal_method: drill_out
+    damage_to_self: major
+    damage_to_host: none
+    re_installable: false
+    reuse_cycles: 0
+    ghg_A1A3: 1.1
+    ghg_A5: 0.2
+    ghg_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±30%"
+      basis_note: "illustrative; see docs/open-questions.md #9"
+    cost_install: 7
+    cost_removal: 9
+    cost_data:
+      source: "PLACEHOLDER - illustrative demo dataset, not sourced"
+      data_type: estimate
+      vintage: 2026
+      geography: AU
+      uncertainty: "±30%"
+      basis_note: "illustrative; see docs/open-questions.md #9"

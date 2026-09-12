@@ -127,3 +127,45 @@ rather than left undone, documented where they live in code:
   into a `priority:` section of `data/project_wall.yaml` — the one
   remaining per-project file — rather than hardcoded in `priority.py` or
   given a sixth data file outside that list.
+
+## 9. Demo dataset — entirely illustrative, not sourced
+
+Per the user's explicit request ("generate a dataset with multiple
+materials and connections... to be tested and compared"), six element
+types (`timber_stud_frame_60`, `timber_battens_40`,
+`weatherproof_membrane_20`, `mineral_wool_insulation_40`,
+`plasterboard_lining_30`, `rainscreen_fixing_rail_50`) and four
+connection types (`screw_fixing_metal`, `nail_fixing_timber`,
+`staple_fixing`, `rivet_fixing_aluminium`) were added to
+`data/element_types.yaml` / `data/connection_types.yaml`, plus a second
+project file, `data/project_wall_demo.yaml`, connecting them into a
+six-instance wall build-up (structure, battens, membrane, insulation,
+cladding, internal lining) across two comparable options.
+
+Unlike `substrate_60` and the original two connection types (where at
+least the GHG/cost *figures* came from the spec's own worked example),
+every figure on this demo dataset is invented by Claude — order-of-
+magnitude-plausible for the material/connection each one represents, but
+not sourced from any EPD, database, or standard. This is a materially
+different kind of placeholder from entries #1–#3 above (which fill a gap
+in *given* figures) — this is a whole dataset with no given figures
+behind it at all, built because the user asked for exactly that, to
+demonstrate the app against more than the original two-instance fixture.
+
+**Needed to close this**: real EPD/database figures and real connection
+performance data, if this dataset is ever meant to inform an actual
+decision rather than demonstrate the tool.
+
+Two small, general fixes came out of building this, not specific to the
+dataset itself:
+- `engine.assembly_reference_area_m2` changed from summing every
+  skin-layer instance's face area to taking the largest one, since a
+  multi-layer skin (cladding + membrane + insulation, say) covers the
+  same footprint at each layer rather than adding area. Identical
+  behaviour for a graph with only one skin instance (the original
+  fixture), so no change there.
+- `rules.dfm_001_dfma_opposes_circularity` now rounds
+  `connection_ghg_upfront` before reporting it, fixing a floating-point
+  artifact (e.g. `0.1 + 0.05` printing as `0.15000000000000002`) that the
+  original two-connection dataset never exercised (both its rows summed
+  to a value that happened to print cleanly).

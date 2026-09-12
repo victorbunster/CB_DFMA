@@ -31,6 +31,16 @@ cdfma --project data/project_wall.yaml
 Prints the three reports (findings, option comparison, gap report) for
 both options declared in `data/project_wall.yaml`.
 
+A second, richer project file, `data/project_wall_demo.yaml`, loads a
+six-instance wall build-up (structure, battens, membrane, insulation,
+cladding, lining) built from a larger demo library also added to
+`data/element_types.yaml` / `data/connection_types.yaml` — entirely
+illustrative, not sourced (see `docs/open-questions.md` #9). Try it:
+
+```
+python -m cdfma.cli --project data/project_wall_demo.yaml
+```
+
 ## GUI
 
 ```

@@ -109,12 +109,43 @@ def test_loads_shipped_element_types() -> None:
     assert panel.cost.residual_value == 0
 
 
+def test_loads_shipped_demo_element_types() -> None:
+    # Entirely illustrative demo dataset (docs/open-questions.md #9),
+    # added so the library has more than two element types to load,
+    # compare and extend against.
+    element_types = load_element_types(DATA_DIR / "element_types.yaml")
+    assert set(element_types) == {
+        "cladding_panel_alu_mw_25",
+        "substrate_60",
+        "timber_stud_frame_60",
+        "timber_battens_40",
+        "weatherproof_membrane_20",
+        "mineral_wool_insulation_40",
+        "plasterboard_lining_30",
+        "rainscreen_fixing_rail_50",
+    }
+    # spans layers beyond the original skin/structure pair
+    layers = {et.layer for et in element_types.values()}
+    assert layers == {"skin", "structure", "space_plan"}
+    # exercises declared units the original two-element fixture never did
+    declared_units = {et.embodied_ghg.declared_unit for et in element_types.values()}
+    assert declared_units == {"per_m2", "per_kg"}
+
+
 def test_loads_shipped_connection_types() -> None:
     # adhesive_bond / mechanical_bracket carry PLACEHOLDER DataQuality
     # (docs/open-questions.md #1) but are otherwise real, from the
-    # worked-example appendix.
+    # worked-example appendix. The rest are an entirely illustrative demo
+    # dataset (docs/open-questions.md #9).
     connection_types = load_connection_types(DATA_DIR / "connection_types.yaml")
-    assert set(connection_types) == {"adhesive_bond", "mechanical_bracket"}
+    assert set(connection_types) == {
+        "adhesive_bond",
+        "mechanical_bracket",
+        "screw_fixing_metal",
+        "nail_fixing_timber",
+        "staple_fixing",
+        "rivet_fixing_aluminium",
+    }
     assert connection_types["adhesive_bond"].damage_to_host == "major"
     assert connection_types["mechanical_bracket"].re_installable is True
 
