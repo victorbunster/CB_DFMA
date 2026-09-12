@@ -52,3 +52,12 @@ python -m pytest
 tests in scope for Slice 1 (1, 2, 5, 6, 7 — see CLAUDE.md §7).
 `tests/test_library.py` covers the library layer's loading and
 validation directly.
+
+## Web version
+
+[`streamlit_app/`](streamlit_app/) is a public-hostable Streamlit
+counterpart to the Tkinter GUI, built on the same `cdfma` package
+unchanged. Kept in its own folder since Streamlit is a web framework and
+a dependency CLAUDE.md §4/§8 deliberately keep out of `src/cdfma` — see
+[`streamlit_app/README.md`](streamlit_app/README.md) for how to run it
+locally or deploy it.

@@ -1,0 +1,10 @@
+# cdfma's own runtime dependencies (see pyproject.toml at the repo root) —
+# pinned to the same ranges, since streamlit_app/ imports src/cdfma
+# directly rather than installing it as a package (see app.py).
+pydantic>=2,<3
+PyYAML>=6,<7
+
+# The one addition this folder makes beyond CLAUDE.md §8's dependency
+# list — deliberately kept out of src/cdfma (see app.py's module
+# docstring and streamlit_app/README.md).
+streamlit>=1.38,<2
