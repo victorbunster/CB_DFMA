@@ -1,0 +1,14 @@
+# Connection types (facts) — spec §2.4, minus mates[] (references
+# interface roles and geometry types, out of scope for Slice 1 — see
+# CLAUDE.md §2 and src/cdfma/schema.py).
+#
+# Left empty for now: the worked example in docs/mvp-scope.md's appendix
+# gives adhesive_bond and mechanical_bracket's removal method, damage
+# expectations and GHG/cost figures, but never a DataQuality record
+# (source, data_type, vintage, geography, uncertainty) for those figures.
+# CLAUDE.md §5 (architecture invariant 7) requires one for every GHG and
+# cost figure loaded — fabricating a source citation to fill the gap would
+# defeat the entire point of DataQuality, so this is recorded as an open
+# question (docs/open-questions.md) rather than invented.
+
+connection_types: []

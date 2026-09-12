@@ -1,0 +1,12 @@
+# Project parameters — facts about the assessment, not preferences
+# (spec §2.8). Declared once per project and reported on every output.
+#
+# Source: docs/mvp-scope.md §1 scope table and appendix worked example.
+project_parameters:
+  study_period: 60          # years; default per spec §1
+  discount_rate: 0.0        # undiscounted base case
+  sensitivity_rates: [0.05] # rank-stability check runs at this rate too
+  currency: AUD
+  price_date: "2026-06"
+  transport_distance: null  # A4 entered directly for the cladding panel, not derived
+  grid_assumption: static

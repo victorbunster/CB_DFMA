@@ -1,0 +1,79 @@
+# Element types (facts) — spec §2.1, at G0/G1 geometric definition
+# (CLAUDE.md §2: interfaces and G2+ geometry are out of scope for Slice 1).
+#
+# cladding_panel_alu_mw_25 is transcribed from the worked example in
+# docs/mvp-scope.md's appendix, minus its interfaces[] block (out of scope)
+# and minus g_level G3 (downgraded to G1: this Slice stores envelope, mass
+# and shape_class, but no interface roles, so G1 is the honest ceiling).
+# `nestable` is not stated in the source and is left null rather than
+# invented — see docs/open-questions.md.
+#
+# substrate_60, the joint's other side in the worked example, is NOT yet
+# transcribed here: the appendix only gives its service_life, layer,
+# shape_class and GHG/cost figures — composition, mass, envelope,
+# decomposable, declared_recovery_pathway and provenance are never stated.
+# Recorded as an open question rather than invented.
+
+element_types:
+  - id: cladding_panel_alu_mw_25
+    name: "Cladding panel, aluminium / mineral wool, 25yr"
+    layer: skin
+    tier: product_assembly
+
+    service_life: 25
+    service_life_basis: warranty
+    composition:
+      - material: aluminium
+        mass_fraction: 0.35
+      - material: mineral_wool
+        mass_fraction: 0.60
+      - material: pu_adhesive
+        mass_fraction: 0.05
+    decomposable: false
+    declared_recovery_pathway: reuse_as_is
+    recovery_preconditions: [edges_undamaged, fixings_removable]
+    provenance: archetype
+
+    shape_class: planar
+    envelope:
+      length: 1200
+      width: 2400
+      thickness: 90
+    envelope_fill_ratio: 1.0
+    mass: 78
+    coordination_module: 600
+    orientation_constraint: keep_flat
+    stackable: true
+    nestable: null
+    geometry_provenance: archetype
+    g_level: G1
+
+    embodied_ghg:
+      declared_unit: per_m2
+      ghg_A1A3: 38.0
+      ghg_A4: 2.1
+      ghg_A5: 1.4
+      ghg_C: 3.6
+      ghg_D: -9.0
+      ghg_data:
+        source: "generic database 2023"
+        data_type: generic_database
+        vintage: 2023
+        geography: AU
+        uncertainty: "±30%"
+        basis_note: ""
+
+    cost:
+      currency: AUD
+      price_date: "2026-06"
+      cost_supply: 310
+      cost_install: 110
+      cost_removal: 45
+      residual_value: 0
+      cost_data:
+        source: "tender return 2026-03"
+        data_type: estimate
+        vintage: 2026
+        geography: AU-VIC
+        uncertainty: "±20%"
+        basis_note: "no reuse market evidence behind residual_value: 0"
