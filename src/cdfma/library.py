@@ -114,6 +114,20 @@ def load_connection_types(path: Path) -> dict[str, ConnectionType]:
     return _load_records(path, "connection_types", ConnectionType)
 
 
+def append_connection_type(path: Path, connection_type: ConnectionType) -> None:
+    """Add one new connection type to ``connection_types.yaml`` (spec
+    §2.4) — the manual-entry path for connections, mirroring
+    ``append_element_type`` above (see its docstring for why this appends
+    text rather than re-serializing the file).
+
+    Raises ``LibraryError`` if ``connection_type.id`` already exists.
+    """
+    existing = load_connection_types(path)
+    if connection_type.id in existing:
+        raise LibraryError(f"connection type id {connection_type.id!r} already exists in {path}")
+    _append_record(path, "connection_types", connection_type)
+
+
 def load_project_parameters(path: Path) -> ProjectParameters:
     """Load and validate the single ``project_parameters.yaml`` record."""
     document = _read_yaml(path)

@@ -15,12 +15,21 @@ import yaml
 from cdfma.library import (
     Library,
     LibraryError,
+    append_connection_type,
     append_element_type,
     load_connection_types,
     load_element_types,
     load_project_parameters,
 )
-from cdfma.schema import CompositionEntry, DataQuality, ElementCost, ElementType, EmbodiedGHG, Envelope
+from cdfma.schema import (
+    CompositionEntry,
+    ConnectionType,
+    DataQuality,
+    ElementCost,
+    ElementType,
+    EmbodiedGHG,
+    Envelope,
+)
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -242,3 +251,62 @@ def test_append_element_type_writes_valid_yaml(tmp_path: Path) -> None:
     # The file is still well-formed YAML, not just text concatenation.
     document = yaml.safe_load(target.read_text(encoding="utf-8"))
     assert document["element_types"][0]["id"] == "test_brick"
+
+
+# --- append_connection_type: manual entry (gui.py's "Add connection" tab) -
+
+
+def _sample_connection_type(connection_type_id: str = "test_clip") -> ConnectionType:
+    dq = DataQuality(source="test", data_type="estimate", vintage=2026, geography="AU", uncertainty="±20%")
+    return ConnectionType(
+        id=connection_type_id,
+        name="Test clip fixing",
+        removal_method="unclip",
+        damage_to_self="none",
+        damage_to_host="minor",
+        re_installable=True,
+        tolerance_absorbed=4,
+        reuse_cycles=5,
+        ghg_A1A3=2.0,
+        ghg_A5=0.3,
+        ghg_data=dq,
+        cost_install=15,
+        cost_removal=10,
+        cost_data=dq,
+    )
+
+
+def test_append_connection_type_preserves_existing_content_and_reloads(tmp_path: Path) -> None:
+    target = tmp_path / "connection_types.yaml"
+    target.write_text((DATA_DIR / "connection_types.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+    before = target.read_text(encoding="utf-8")
+
+    append_connection_type(target, _sample_connection_type())
+
+    after = target.read_text(encoding="utf-8")
+    assert before in after, "existing content (including comments) must survive untouched"
+
+    reloaded = load_connection_types(target)
+    assert "adhesive_bond" in reloaded  # original records still load
+    assert reloaded["test_clip"].reuse_cycles == 5
+
+
+def test_append_connection_type_rejects_duplicate_id(tmp_path: Path) -> None:
+    target = tmp_path / "connection_types.yaml"
+    target.write_text((DATA_DIR / "connection_types.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(LibraryError, match="already exists"):
+        append_connection_type(target, _sample_connection_type("adhesive_bond"))
+
+
+def test_append_connection_type_handles_empty_flow_list(tmp_path: Path) -> None:
+    # connection_types.yaml briefly shipped as "connection_types: []";
+    # appending the first real record to that shape must still produce
+    # valid YAML (see append_element_type's equivalent test/fix).
+    target = tmp_path / "connection_types.yaml"
+    target.write_text("connection_types: []\n", encoding="utf-8")
+
+    append_connection_type(target, _sample_connection_type())
+
+    document = yaml.safe_load(target.read_text(encoding="utf-8"))
+    assert document["connection_types"][0]["id"] == "test_clip"

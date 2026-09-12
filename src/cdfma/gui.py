@@ -21,9 +21,17 @@ from tkinter import filedialog, messagebox, ttk
 from pydantic import ValidationError
 
 from cdfma.cli import ProjectResult, evaluate_project
-from cdfma.library import LibraryError, append_element_type
+from cdfma.library import LibraryError, append_connection_type, append_element_type
 from cdfma.report import render_comparison, render_findings, render_gap_report
-from cdfma.schema import CompositionEntry, DataQuality, ElementCost, ElementType, EmbodiedGHG, Envelope
+from cdfma.schema import (
+    CompositionEntry,
+    ConnectionType,
+    DataQuality,
+    ElementCost,
+    ElementType,
+    EmbodiedGHG,
+    Envelope,
+)
 
 # Static reference text only — no computation, no domain content beyond
 # what data/rules.yaml and mvp-scope.md §3.2 already declare. Kept here
@@ -84,6 +92,11 @@ generic factor, or an estimate, per the data's own DataQuality record.
 
 Several logic thresholds and some library facts are PLACEHOLDER values,
 not real data — see docs/open-questions.md.
+
+Use "Add material" / "Add connection" to enter a new element type or
+connection type by hand (spec §6). Saving adds it to element_types.yaml /
+connection_types.yaml, but it won't appear in a run until an Instance or
+ConnectionInstance in your project file also references its id.
 """
 
 
@@ -148,6 +161,10 @@ class App(tk.Tk):
         add_tab = ttk.Frame(self.notebook)
         self.notebook.add(add_tab, text="Add material")
         self._build_add_element_type_tab(add_tab)
+
+        add_connection_tab = ttk.Frame(self.notebook)
+        self.notebook.add(add_connection_tab, text="Add connection")
+        self._build_add_connection_type_tab(add_connection_tab)
 
     def _make_text(self, parent: ttk.Frame) -> tk.Text:
         frame = ttk.Frame(parent)
@@ -247,8 +264,12 @@ class App(tk.Tk):
     _DECLARED_UNITS = ["per_element", "per_m2", "per_m", "per_kg"]
     _DATA_TYPES = ["product_specific_epd", "industry_average", "generic_database", "estimate"]
     _NESTABLE_CHOICES = {"Unspecified": None, "Yes": True, "No": False}
+    _DAMAGE_LEVELS = ["none", "minor", "major"]
 
-    def _build_add_element_type_tab(self, parent: ttk.Frame) -> None:
+    def _make_scrollable_form(self, parent: ttk.Frame) -> ttk.Frame:
+        """A vertically-scrolling form area — shared by every "Add ..."
+        tab, since each has more fields than fit in the window at once.
+        """
         outer = ttk.Frame(parent)
         outer.pack(fill="both", expand=True)
 
@@ -265,44 +286,52 @@ class App(tk.Tk):
             lambda _e: canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-e.delta / 120), "units")),
         )
         canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+        return form
 
+    @staticmethod
+    def _form_section(form: ttk.Frame, title: str) -> ttk.LabelFrame:
+        frame = ttk.LabelFrame(form, text=title, padding=8)
+        frame.pack(fill="x", pady=(0, 10))
+        return frame
+
+    @staticmethod
+    def _form_row(
+        frame: ttk.Frame, store: dict[str, tk.Variable], label: str, key: str, kind: str = "entry", values=None, default=""
+    ) -> None:
+        r = frame.grid_size()[1]
+        ttk.Label(frame, text=label, width=26, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
+        if kind == "combo":
+            var = tk.StringVar(value=default or values[0])
+            ttk.Combobox(frame, textvariable=var, values=values, state="readonly", width=28).grid(
+                row=r, column=1, sticky="w"
+            )
+        elif kind == "check":
+            var = tk.BooleanVar(value=bool(default))
+            ttk.Checkbutton(frame, variable=var).grid(row=r, column=1, sticky="w")
+        else:
+            var = tk.StringVar(value=default)
+            ttk.Entry(frame, textvariable=var, width=30).grid(row=r, column=1, sticky="w")
+        store[key] = var
+
+    def _build_add_element_type_tab(self, parent: ttk.Frame) -> None:
+        form = self._make_scrollable_form(parent)
         v: dict[str, tk.Variable] = {}
         self._et_vars = v
+        section, row = self._form_section, lambda *a, **k: self._form_row(*a, **k)
 
-        def section(title: str) -> ttk.LabelFrame:
-            frame = ttk.LabelFrame(form, text=title, padding=8)
-            frame.pack(fill="x", pady=(0, 10))
-            return frame
+        identity = section(form, "Identity & lifecycle")
+        row(identity, v, "id (snake_case)", "id")
+        row(identity, v, "name", "name")
+        row(identity, v, "layer", "layer", "combo", self._LAYERS)
+        row(identity, v, "tier", "tier", "combo", self._TIERS)
+        row(identity, v, "service_life (years)", "service_life")
+        row(identity, v, "service_life_basis", "service_life_basis", "combo", self._SERVICE_LIFE_BASES)
+        row(identity, v, "decomposable", "decomposable", "check")
+        row(identity, v, "declared_recovery_pathway", "declared_recovery_pathway", "combo", self._RECOVERY_PATHWAYS)
+        row(identity, v, "recovery_preconditions (comma-sep)", "recovery_preconditions")
+        row(identity, v, "provenance", "provenance", "combo", self._PROVENANCES)
 
-        def row(frame: ttk.Frame, label: str, key: str, kind: str = "entry", values=None, default="") -> None:
-            r = frame.grid_size()[1]
-            ttk.Label(frame, text=label, width=26, anchor="w").grid(row=r, column=0, sticky="w", pady=2)
-            if kind == "combo":
-                var = tk.StringVar(value=default or values[0])
-                ttk.Combobox(frame, textvariable=var, values=values, state="readonly", width=28).grid(
-                    row=r, column=1, sticky="w"
-                )
-            elif kind == "check":
-                var = tk.BooleanVar(value=bool(default))
-                ttk.Checkbutton(frame, variable=var).grid(row=r, column=1, sticky="w")
-            else:
-                var = tk.StringVar(value=default)
-                ttk.Entry(frame, textvariable=var, width=30).grid(row=r, column=1, sticky="w")
-            v[key] = var
-
-        identity = section("Identity & lifecycle")
-        row(identity, "id (snake_case)", "id")
-        row(identity, "name", "name")
-        row(identity, "layer", "layer", "combo", self._LAYERS)
-        row(identity, "tier", "tier", "combo", self._TIERS)
-        row(identity, "service_life (years)", "service_life")
-        row(identity, "service_life_basis", "service_life_basis", "combo", self._SERVICE_LIFE_BASES)
-        row(identity, "decomposable", "decomposable", "check")
-        row(identity, "declared_recovery_pathway", "declared_recovery_pathway", "combo", self._RECOVERY_PATHWAYS)
-        row(identity, "recovery_preconditions (comma-sep)", "recovery_preconditions")
-        row(identity, "provenance", "provenance", "combo", self._PROVENANCES)
-
-        composition_section = section("Composition (materials must sum to 1.0)")
+        composition_section = section(form, "Composition (materials must sum to 1.0)")
         self._composition_rows_frame = ttk.Frame(composition_section)
         self._composition_rows_frame.pack(fill="x")
         self._composition_rows: list[dict] = []
@@ -311,48 +340,48 @@ class App(tk.Tk):
             anchor="w", pady=(4, 0)
         )
 
-        geometry = section("Geometry (G0/G1)")
-        row(geometry, "shape_class", "shape_class", "combo", self._SHAPE_CLASSES)
-        row(geometry, "envelope length (mm)", "envelope_length")
-        row(geometry, "envelope width (mm)", "envelope_width")
-        row(geometry, "envelope thickness (mm)", "envelope_thickness")
-        row(geometry, "envelope_fill_ratio (0-1)", "envelope_fill_ratio", default="1.0")
-        row(geometry, "mass (kg)", "mass")
-        row(geometry, "coordination_module (mm, optional)", "coordination_module")
-        row(geometry, "orientation_constraint", "orientation_constraint", "combo", self._ORIENTATIONS)
-        row(geometry, "stackable", "stackable", "check")
-        row(geometry, "nestable", "nestable", "combo", list(self._NESTABLE_CHOICES), default="Unspecified")
-        row(geometry, "geometry_provenance", "geometry_provenance", "combo", self._GEOMETRY_PROVENANCES)
-        row(geometry, "g_level", "g_level", "combo", self._G_LEVELS)
+        geometry = section(form, "Geometry (G0/G1)")
+        row(geometry, v, "shape_class", "shape_class", "combo", self._SHAPE_CLASSES)
+        row(geometry, v, "envelope length (mm)", "envelope_length")
+        row(geometry, v, "envelope width (mm)", "envelope_width")
+        row(geometry, v, "envelope thickness (mm)", "envelope_thickness")
+        row(geometry, v, "envelope_fill_ratio (0-1)", "envelope_fill_ratio", default="1.0")
+        row(geometry, v, "mass (kg)", "mass")
+        row(geometry, v, "coordination_module (mm, optional)", "coordination_module")
+        row(geometry, v, "orientation_constraint", "orientation_constraint", "combo", self._ORIENTATIONS)
+        row(geometry, v, "stackable", "stackable", "check")
+        row(geometry, v, "nestable", "nestable", "combo", list(self._NESTABLE_CHOICES), default="Unspecified")
+        row(geometry, v, "geometry_provenance", "geometry_provenance", "combo", self._GEOMETRY_PROVENANCES)
+        row(geometry, v, "g_level", "g_level", "combo", self._G_LEVELS)
 
-        ghg = section("Embodied GHG (spec §2.1 — one record per module)")
-        row(ghg, "declared_unit", "declared_unit", "combo", self._DECLARED_UNITS)
-        row(ghg, "ghg_A1A3", "ghg_A1A3")
-        row(ghg, "ghg_A4 (optional)", "ghg_A4")
-        row(ghg, "ghg_A5 (optional)", "ghg_A5")
-        row(ghg, "ghg_C", "ghg_C")
-        row(ghg, "ghg_D (reported separately)", "ghg_D", default="0")
-        row(ghg, "biogenic_carbon (optional)", "biogenic_carbon")
-        row(ghg, "ghg_data.source", "ghg_source")
-        row(ghg, "ghg_data.data_type", "ghg_data_type", "combo", self._DATA_TYPES)
-        row(ghg, "ghg_data.vintage (year)", "ghg_vintage")
-        row(ghg, "ghg_data.geography", "ghg_geography")
-        row(ghg, "ghg_data.uncertainty (e.g. ±25%)", "ghg_uncertainty")
-        row(ghg, "ghg_data.basis_note", "ghg_basis_note")
+        ghg = section(form, "Embodied GHG (spec §2.1 — one record per module)")
+        row(ghg, v, "declared_unit", "declared_unit", "combo", self._DECLARED_UNITS)
+        row(ghg, v, "ghg_A1A3", "ghg_A1A3")
+        row(ghg, v, "ghg_A4 (optional)", "ghg_A4")
+        row(ghg, v, "ghg_A5 (optional)", "ghg_A5")
+        row(ghg, v, "ghg_C", "ghg_C")
+        row(ghg, v, "ghg_D (reported separately)", "ghg_D", default="0")
+        row(ghg, v, "biogenic_carbon (optional)", "biogenic_carbon")
+        row(ghg, v, "ghg_data.source", "ghg_source")
+        row(ghg, v, "ghg_data.data_type", "ghg_data_type", "combo", self._DATA_TYPES)
+        row(ghg, v, "ghg_data.vintage (year)", "ghg_vintage")
+        row(ghg, v, "ghg_data.geography", "ghg_geography")
+        row(ghg, v, "ghg_data.uncertainty (e.g. ±25%)", "ghg_uncertainty")
+        row(ghg, v, "ghg_data.basis_note", "ghg_basis_note")
 
-        cost = section("Cost (spec §2.1)")
-        row(cost, "currency", "currency", default=self.data_dir_var.get() and "AUD" or "AUD")
-        row(cost, "price_date", "price_date")
-        row(cost, "cost_supply", "cost_supply")
-        row(cost, "cost_install", "cost_install")
-        row(cost, "cost_removal", "cost_removal")
-        row(cost, "residual_value", "residual_value", default="0")
-        row(cost, "cost_data.source", "cost_source")
-        row(cost, "cost_data.data_type", "cost_data_type", "combo", self._DATA_TYPES)
-        row(cost, "cost_data.vintage (year)", "cost_vintage")
-        row(cost, "cost_data.geography", "cost_geography")
-        row(cost, "cost_data.uncertainty (e.g. ±25%)", "cost_uncertainty")
-        row(cost, "cost_data.basis_note", "cost_basis_note")
+        cost = section(form, "Cost (spec §2.1)")
+        row(cost, v, "currency", "currency", default="AUD")
+        row(cost, v, "price_date", "price_date")
+        row(cost, v, "cost_supply", "cost_supply")
+        row(cost, v, "cost_install", "cost_install")
+        row(cost, v, "cost_removal", "cost_removal")
+        row(cost, v, "residual_value", "residual_value", default="0")
+        row(cost, v, "cost_data.source", "cost_source")
+        row(cost, v, "cost_data.data_type", "cost_data_type", "combo", self._DATA_TYPES)
+        row(cost, v, "cost_data.vintage (year)", "cost_vintage")
+        row(cost, v, "cost_data.geography", "cost_geography")
+        row(cost, v, "cost_data.uncertainty (e.g. ±25%)", "cost_uncertainty")
+        row(cost, v, "cost_data.basis_note", "cost_basis_note")
 
         button_bar = ttk.Frame(form)
         button_bar.pack(fill="x", pady=(4, 0))
@@ -489,6 +518,119 @@ class App(tk.Tk):
             "— add one, then click Run assessment.",
         )
         self.add_status_var.set(f"Saved {element_type.id!r} to {path}.")
+
+    # --- "Add connection" tab: manual entry of a new connection type ----
+    #
+    # Same shape as "Add material" above: a form collecting values that
+    # pass straight into schema.ConnectionType, which does the actual
+    # validation (id format, the required DataQuality records, …).
+
+    def _build_add_connection_type_tab(self, parent: ttk.Frame) -> None:
+        form = self._make_scrollable_form(parent)
+        v: dict[str, tk.Variable] = {}
+        self._ct_vars = v
+        section, row = self._form_section, lambda *a, **k: self._form_row(*a, **k)
+
+        identity = section(form, "Identity")
+        row(identity, v, "id (snake_case)", "id")
+        row(identity, v, "name", "name")
+        row(identity, v, "removal_method", "removal_method")
+        row(identity, v, "damage_to_self", "damage_to_self", "combo", self._DAMAGE_LEVELS)
+        row(identity, v, "damage_to_host", "damage_to_host", "combo", self._DAMAGE_LEVELS)
+        row(identity, v, "re_installable", "re_installable", "check")
+        row(identity, v, "access_requirement (optional)", "access_requirement")
+        row(identity, v, "tolerance_absorbed (mm, optional)", "tolerance_absorbed")
+        row(identity, v, "reuse_cycles", "reuse_cycles", default="0")
+
+        ghg = section(form, "GHG (spec §2.4 — per connection instance, see Legend)")
+        row(ghg, v, "ghg_A1A3", "ghg_A1A3")
+        row(ghg, v, "ghg_A5", "ghg_A5")
+        row(ghg, v, "ghg_data.source", "ghg_source")
+        row(ghg, v, "ghg_data.data_type", "ghg_data_type", "combo", self._DATA_TYPES)
+        row(ghg, v, "ghg_data.vintage (year)", "ghg_vintage")
+        row(ghg, v, "ghg_data.geography", "ghg_geography")
+        row(ghg, v, "ghg_data.uncertainty (e.g. ±25%)", "ghg_uncertainty")
+        row(ghg, v, "ghg_data.basis_note", "ghg_basis_note")
+
+        cost = section(form, "Cost (spec §2.4)")
+        row(cost, v, "cost_install", "cost_install")
+        row(cost, v, "cost_removal", "cost_removal")
+        row(cost, v, "cost_data.source", "cost_source")
+        row(cost, v, "cost_data.data_type", "cost_data_type", "combo", self._DATA_TYPES)
+        row(cost, v, "cost_data.vintage (year)", "cost_vintage")
+        row(cost, v, "cost_data.geography", "cost_geography")
+        row(cost, v, "cost_data.uncertainty (e.g. ±25%)", "cost_uncertainty")
+        row(cost, v, "cost_data.basis_note", "cost_basis_note")
+
+        button_bar = ttk.Frame(form)
+        button_bar.pack(fill="x", pady=(4, 0))
+        ttk.Button(button_bar, text="Save connection type", command=self._save_connection_type).pack(side="left")
+        self.add_connection_status_var = tk.StringVar(value="")
+        ttk.Label(button_bar, textvariable=self.add_connection_status_var, foreground="#555").pack(side="left", padx=10)
+
+    def _save_connection_type(self) -> None:
+        v = self._ct_vars
+
+        def text(key: str) -> str:
+            return v[key].get().strip()
+
+        def optional_float(key: str) -> float | None:
+            raw = text(key)
+            return float(raw) if raw else None
+
+        try:
+            ghg_data = DataQuality(
+                source=text("ghg_source"),
+                data_type=v["ghg_data_type"].get(),
+                vintage=int(text("ghg_vintage")),
+                geography=text("ghg_geography"),
+                uncertainty=text("ghg_uncertainty"),
+                basis_note=text("ghg_basis_note"),
+            )
+            cost_data = DataQuality(
+                source=text("cost_source"),
+                data_type=v["cost_data_type"].get(),
+                vintage=int(text("cost_vintage")),
+                geography=text("cost_geography"),
+                uncertainty=text("cost_uncertainty"),
+                basis_note=text("cost_basis_note"),
+            )
+            connection_type = ConnectionType(
+                id=text("id"),
+                name=text("name"),
+                removal_method=text("removal_method"),
+                damage_to_self=v["damage_to_self"].get(),
+                damage_to_host=v["damage_to_host"].get(),
+                re_installable=bool(v["re_installable"].get()),
+                access_requirement=text("access_requirement"),
+                tolerance_absorbed=optional_float("tolerance_absorbed"),
+                reuse_cycles=int(text("reuse_cycles")),
+                ghg_A1A3=float(text("ghg_A1A3")),
+                ghg_A5=float(text("ghg_A5")),
+                ghg_data=ghg_data,
+                cost_install=float(text("cost_install")),
+                cost_removal=float(text("cost_removal")),
+                cost_data=cost_data,
+            )
+        except (ValidationError, ValueError, TypeError, KeyError) as exc:
+            messagebox.showerror("Invalid connection type", str(exc))
+            return
+
+        path = Path(self.data_dir_var.get()) / "connection_types.yaml"
+        try:
+            append_connection_type(path, connection_type)
+        except LibraryError as exc:
+            messagebox.showerror("Could not save", str(exc))
+            return
+
+        messagebox.showinfo(
+            "Saved",
+            f"Added {connection_type.id!r} to {path}.\n\n"
+            "It won't appear in an assessment until a ConnectionInstance "
+            f"in your project file references connection_type_id: "
+            f"{connection_type.id} — add one, then click Run assessment.",
+        )
+        self.add_connection_status_var.set(f"Saved {connection_type.id!r} to {path}.")
 
 
 def main() -> int:
