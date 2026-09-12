@@ -60,7 +60,7 @@ def _count_charts(at: AppTest) -> int:
 def test_app_loads_without_exception() -> None:
     at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
     assert not at.exception
-    assert len(at.tabs) == 7
+    assert len(at.tabs) == 8
 
 
 def test_run_assessment_against_temp_data(temp_data_dir: Path) -> None:
@@ -246,3 +246,53 @@ def test_add_connection_saves_and_reloads(temp_data_dir: Path) -> None:
     assert "test_clip" in reloaded
     assert reloaded["test_clip"].reuse_cycles == 5
     assert "adhesive_bond" in reloaded
+
+
+def test_build_wall_saves_and_reloads(temp_data_dir: Path) -> None:
+    from cdfma.graph import load_options
+
+    project_path = temp_data_dir / "project_wall.yaml"
+
+    at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    _by_label(at, "Data dir").set_value(str(temp_data_dir))
+    at.run()  # picks up the library for the element/connection type dropdowns
+
+    at.text_input(key="wall_target").set_value(str(project_path))
+    at.text_input(key="wall_option_id").set_value("my_streamlit_wall")
+    at.text_input(key="wall_inst_id_0").set_value("frame_x")
+    at.selectbox(key="wall_inst_type_0").set_value("timber_stud_frame_60")
+    at.button(key="wall_add_instance").click().run()
+    at.text_input(key="wall_inst_id_1").set_value("cladding_x")
+    at.selectbox(key="wall_inst_type_1").set_value("cladding_panel_alu_mw_25")
+    at.button(key="wall_add_connection").click().run()
+    at.text_input(key="wall_conn_id_0").set_value("joint_x")
+    at.selectbox(key="wall_conn_type_0").set_value("screw_fixing_metal")
+    at.text_input(key="wall_conn_element_0").set_value("cladding_x")
+    at.text_input(key="wall_conn_host_0").set_value("frame_x")
+
+    at.button(key="save_wall").click().run()
+
+    assert not at.exception
+    assert not at.error
+    assert at.success
+
+    reloaded = load_options(project_path)
+    assert "my_streamlit_wall" in reloaded
+    assert reloaded["my_streamlit_wall"].connection_instances["joint_x"].host_instance_id == "frame_x"
+    # existing options survive untouched alongside it
+    assert "option_a_bonded" in reloaded and "option_b_mechanical" in reloaded
+
+
+def test_build_wall_rejects_missing_option_id(temp_data_dir: Path) -> None:
+    at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    _by_label(at, "Data dir").set_value(str(temp_data_dir))
+    at.run()
+    at.text_input(key="wall_target").set_value(str(temp_data_dir / "project_wall.yaml"))
+    at.text_input(key="wall_inst_id_0").set_value("frame_x")
+    at.selectbox(key="wall_inst_type_0").set_value("timber_stud_frame_60")
+    # wall_option_id left blank
+
+    at.button(key="save_wall").click().run()
+
+    assert not at.exception  # an invalid submission must surface st.error, never crash
+    assert at.error

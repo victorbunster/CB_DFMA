@@ -1,11 +1,16 @@
 # Circular DfMA — Streamlit interface
 
 A public-hostable counterpart to `python -m cdfma.gui` (the Tkinter
-desktop GUI). Seven sections — Legend, Findings, Composition, Option
-comparison, Gap report, Add material, Add connection — built on the exact
-same `cdfma` package (`src/cdfma`, unchanged) that the CLI and Tkinter GUI
-use. See [`app.py`](app.py)'s module docstring for why this lives in its
-own folder rather than inside `src/cdfma`.
+desktop GUI). Eight sections — Legend, Findings, Composition, Option
+comparison, Gap report, Add material, Add connection, Build wall — built
+on the exact same `cdfma` package (`src/cdfma`, unchanged) that the CLI
+and Tkinter GUI use. See [`app.py`](app.py)'s module docstring for why
+this lives in its own folder rather than inside `src/cdfma`.
+
+**Build wall** assembles instances (each names an element type) and
+connections (each names a connection type and the element/host instance
+pair it joins) into a new option, saved into whichever project file is
+named there — a new file if it doesn't exist yet.
 
 The sidebar's **Compare** dropdowns narrow a run to exactly two options
 out of however many the project file holds (needed once it has more than

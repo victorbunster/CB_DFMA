@@ -37,7 +37,10 @@ from pydantic import ValidationError  # noqa: E402
 
 from cdfma.cli import ProjectResult, evaluate_project, list_option_ids  # noqa: E402
 from cdfma.engine import cumulative_by_year  # noqa: E402
-from cdfma.library import LibraryError, append_connection_type, append_element_type  # noqa: E402
+from cdfma.graph import GraphError  # noqa: E402
+from cdfma.graph import Graph as ProjectGraph  # noqa: E402
+from cdfma.graph import append_option  # noqa: E402
+from cdfma.library import Library, LibraryError, append_connection_type, append_element_type  # noqa: E402
 from cdfma.report import (  # noqa: E402
     render_comparison,
     render_composition,
@@ -47,12 +50,14 @@ from cdfma.report import (  # noqa: E402
 )
 from cdfma.schema import (  # noqa: E402
     CompositionEntry,
+    ConnectionInstance,
     ConnectionType,
     DataQuality,
     ElementCost,
     ElementType,
     EmbodiedGHG,
     Envelope,
+    Instance,
 )
 
 # Categorical palette (dataviz skill's validated default, light-mode
@@ -245,8 +250,26 @@ if run_clicked:
 result: ProjectResult | None = st.session_state.get("project_result")
 result_error: str | None = st.session_state.get("project_result_error")
 
-tab_legend, tab_findings, tab_composition, tab_comparison, tab_gaps, tab_add_material, tab_add_connection = st.tabs(
-    ["Legend", "Findings", "Composition", "Option comparison", "Gap report", "Add material", "Add connection"]
+(
+    tab_legend,
+    tab_findings,
+    tab_composition,
+    tab_comparison,
+    tab_gaps,
+    tab_add_material,
+    tab_add_connection,
+    tab_build_wall,
+) = st.tabs(
+    [
+        "Legend",
+        "Findings",
+        "Composition",
+        "Option comparison",
+        "Gap report",
+        "Add material",
+        "Add connection",
+        "Build wall",
+    ]
 )
 
 with tab_legend:
@@ -620,4 +643,142 @@ with tab_add_connection:
                 st.success(
                     f"Added {connection_type.id!r} to {path}. It won't appear in an assessment until a "
                     f"ConnectionInstance references connection_type_id: {connection_type.id} — add one, then Run assessment."
+                )
+
+
+# --- "Build wall": assemble instances/connections into a new option -------
+#
+# Same invariant as the tabs above: a form only. It collects rows,
+# constructs real schema.Instance/ConnectionInstance objects and a
+# graph.Graph (which validates internal references and rejects a
+# self-referential connection), validates that against the library, then
+# hands the result to graph.append_option — none of that logic lives here.
+
+with tab_build_wall:
+    st.caption(
+        "Assemble instances (each names an element type) and connections "
+        "(each names a connection type and the element_instance_id/"
+        "host_instance_id pair it joins) into a new option. Saving adds it "
+        "to whichever project file is named below — a new file is created "
+        "if it doesn't exist yet."
+    )
+
+    wall_target = st.text_input("Target project file", value=project_input, key="wall_target")
+    wall_option_id = st.text_input("New option id (snake_case)", key="wall_option_id")
+
+    wall_library: Library | None = None
+    try:
+        wall_library = Library.load(Path(data_dir_input))
+        wall_element_type_ids = sorted(wall_library.element_types)
+        wall_connection_type_ids = sorted(wall_library.connection_types)
+    except Exception as exc:  # noqa: BLE001 - reported, not fatal
+        wall_element_type_ids, wall_connection_type_ids = [], []
+        st.warning(f"Could not load library from {data_dir_input!r}: {exc}")
+
+    if "wall_instance_ids" not in st.session_state:
+        st.session_state.wall_instance_ids = [0]
+        st.session_state.wall_instance_next_id = 1
+    if "wall_connection_ids" not in st.session_state:
+        st.session_state.wall_connection_ids = []
+        st.session_state.wall_connection_next_id = 0
+
+    st.subheader("Instances")
+    for row_id in list(st.session_state.wall_instance_ids):
+        cols = st.columns([3, 4, 3, 1])
+        cols[0].text_input("id", key=f"wall_inst_id_{row_id}", label_visibility="collapsed", placeholder="instance id")
+        cols[1].selectbox(
+            "element_type_id",
+            wall_element_type_ids,
+            key=f"wall_inst_type_{row_id}",
+            label_visibility="collapsed",
+            placeholder="element_type_id",
+            index=None,
+        )
+        cols[2].text_input("label", key=f"wall_inst_label_{row_id}", label_visibility="collapsed", placeholder="label (optional)")
+        if cols[3].button("✕", key=f"wall_inst_remove_{row_id}") and len(st.session_state.wall_instance_ids) > 1:
+            st.session_state.wall_instance_ids.remove(row_id)
+            st.rerun()
+    if st.button("+ Add instance row", key="wall_add_instance"):
+        st.session_state.wall_instance_ids.append(st.session_state.wall_instance_next_id)
+        st.session_state.wall_instance_next_id += 1
+        st.rerun()
+
+    st.subheader("Connections")
+    st.caption("element_instance_id / host_instance_id must match instance ids entered above.")
+    for row_id in list(st.session_state.wall_connection_ids):
+        cols = st.columns([2, 3, 2, 2, 1])
+        cols[0].text_input("id", key=f"wall_conn_id_{row_id}", label_visibility="collapsed", placeholder="connection id")
+        cols[1].selectbox(
+            "connection_type_id",
+            wall_connection_type_ids,
+            key=f"wall_conn_type_{row_id}",
+            label_visibility="collapsed",
+            placeholder="connection_type_id",
+            index=None,
+        )
+        cols[2].text_input("element_instance_id", key=f"wall_conn_element_{row_id}", label_visibility="collapsed", placeholder="element_instance_id")
+        cols[3].text_input("host_instance_id", key=f"wall_conn_host_{row_id}", label_visibility="collapsed", placeholder="host_instance_id")
+        if cols[4].button("✕", key=f"wall_conn_remove_{row_id}"):
+            st.session_state.wall_connection_ids.remove(row_id)
+            st.rerun()
+    if st.button("+ Add connection row", key="wall_add_connection"):
+        st.session_state.wall_connection_ids.append(st.session_state.wall_connection_next_id)
+        st.session_state.wall_connection_next_id += 1
+        st.rerun()
+
+    if st.button("Save wall", key="save_wall", type="primary"):
+        try:
+            if not wall_option_id.strip():
+                raise ValueError("a new option id is required")
+
+            instances: dict[str, Instance] = {}
+            for row_id in st.session_state.wall_instance_ids:
+                instance_id = st.session_state.get(f"wall_inst_id_{row_id}", "").strip()
+                element_type_id = st.session_state.get(f"wall_inst_type_{row_id}") or ""
+                if not instance_id and not element_type_id:
+                    continue
+                instance = Instance(
+                    id=instance_id, element_type_id=element_type_id, label=st.session_state.get(f"wall_inst_label_{row_id}", "")
+                )
+                if instance.id in instances:
+                    raise ValueError(f"duplicate instance id {instance.id!r}")
+                instances[instance.id] = instance
+            if not instances:
+                raise ValueError("at least one instance is required")
+
+            connection_instances: dict[str, ConnectionInstance] = {}
+            for row_id in st.session_state.wall_connection_ids:
+                connection_id = st.session_state.get(f"wall_conn_id_{row_id}", "").strip()
+                connection_type_id = st.session_state.get(f"wall_conn_type_{row_id}") or ""
+                if not connection_id and not connection_type_id:
+                    continue
+                connection = ConnectionInstance(
+                    id=connection_id,
+                    connection_type_id=connection_type_id,
+                    element_instance_id=st.session_state.get(f"wall_conn_element_{row_id}", "").strip(),
+                    host_instance_id=st.session_state.get(f"wall_conn_host_{row_id}", "").strip(),
+                )
+                if connection.id in connection_instances:
+                    raise ValueError(f"duplicate connection instance id {connection.id!r}")
+                connection_instances[connection.id] = connection
+
+            if wall_library is None:
+                raise ValueError(f"could not load the library from {data_dir_input!r} — fix that first")
+            graph = ProjectGraph(
+                instances=instances, connection_instances=connection_instances, composition_edges=[], dependency_edges=[]
+            )
+            graph.validate_against_library(wall_library)
+        except (ValidationError, ValueError, TypeError, GraphError, LibraryError) as exc:
+            st.error(f"Invalid wall: {exc}")
+        else:
+            target_path = Path(wall_target)
+            try:
+                append_option(target_path, wall_option_id.strip(), graph)
+            except GraphError as exc:
+                st.error(f"Could not save: {exc}")
+            else:
+                st.success(
+                    f"Added option {wall_option_id.strip()!r} ({len(instances)} instance(s), "
+                    f"{len(connection_instances)} connection(s)) to {target_path}. Set Project file to this "
+                    "path in the sidebar and click Run assessment to see it."
                 )
