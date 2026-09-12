@@ -1,11 +1,20 @@
 # Circular DfMA — Streamlit interface
 
 A public-hostable counterpart to `python -m cdfma.gui` (the Tkinter
-desktop GUI). Same six sections — Legend, Findings, Option comparison,
-Gap report, Add material, Add connection — built on the exact same
-`cdfma` package (`src/cdfma`, unchanged) that the CLI and Tkinter GUI use.
-See [`app.py`](app.py)'s module docstring for why this lives in its own
-folder rather than inside `src/cdfma`.
+desktop GUI). Seven sections — Legend, Findings, Composition, Option
+comparison, Gap report, Add material, Add connection — built on the exact
+same `cdfma` package (`src/cdfma`, unchanged) that the CLI and Tkinter GUI
+use. See [`app.py`](app.py)'s module docstring for why this lives in its
+own folder rather than inside `src/cdfma`.
+
+The sidebar's **Compare** dropdowns narrow a run to exactly two options
+out of however many the project file holds (needed once it has more than
+two — e.g. after using "Add material"/"Add connection" and hand-editing a
+project file to add another wall). **Option comparison** opens with
+charts: embodied GHG and cost, upfront vs. lifecycle, side by side per
+option; recovery/reversibility; and — the one worth watching — cumulative
+GHG and cost over the study period, with a dashed line at the IND-08
+break-even year when exactly two options were run.
 
 ## Run locally
 

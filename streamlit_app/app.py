@@ -30,12 +30,21 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+import altair as alt  # noqa: E402
+import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
-from cdfma.cli import ProjectResult, evaluate_project  # noqa: E402
+from cdfma.cli import ProjectResult, evaluate_project, list_option_ids  # noqa: E402
+from cdfma.engine import cumulative_by_year  # noqa: E402
 from cdfma.library import LibraryError, append_connection_type, append_element_type  # noqa: E402
-from cdfma.report import render_comparison, render_findings, render_gap_report, render_legend  # noqa: E402
+from cdfma.report import (  # noqa: E402
+    render_comparison,
+    render_composition,
+    render_findings,
+    render_gap_report,
+    render_legend,
+)
 from cdfma.schema import (  # noqa: E402
     CompositionEntry,
     ConnectionType,
@@ -45,6 +54,107 @@ from cdfma.schema import (  # noqa: E402
     EmbodiedGHG,
     Envelope,
 )
+
+# Categorical palette (dataviz skill's validated default, light-mode
+# steps): fixed hue order, never cycled or reassigned by rank — the same
+# option keeps the same color across every chart in one render. Blue/
+# orange (slots 1-2) are what most runs actually see, since Compare
+# narrows to two; slots 3-8 exist for when more options are evaluated at
+# once.
+_SERIES_COLORS = [
+    "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948",
+]
+_ALL_OPTIONS = "(all options in file)"
+
+
+def _color_scale(option_ids: list[str]) -> alt.Scale:
+    return alt.Scale(domain=option_ids, range=_SERIES_COLORS[: len(option_ids)])
+
+
+def _indicator_bar_chart(result: ProjectResult, option_ids: list[str], title: str, rows_fn) -> alt.Chart:
+    """One grouped bar chart: x = indicator (nominal), xOffset = option
+    (dodged bars), y = value, color = option. Two measures of different
+    units (GHG vs cost) never share a chart — each call is one measure.
+    """
+    rows = [row for option_id in option_ids for row in rows_fn(option_id, result.evaluations[option_id])]
+    df = pd.DataFrame(rows)
+    return (
+        alt.Chart(df, title=title)
+        .mark_bar(size=22, cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+        .encode(
+            x=alt.X("indicator:N", title=None, sort=None, axis=alt.Axis(labelAngle=0, labelLimit=160)),
+            xOffset=alt.XOffset("option:N", sort=option_ids),
+            y=alt.Y("value:Q", title=None),
+            color=alt.Color(
+                "option:N", scale=_color_scale(option_ids), sort=option_ids, legend=alt.Legend(title="Option")
+            ),
+            tooltip=["option", "indicator", alt.Tooltip("value:Q", format=".3g")],
+        )
+        .properties(height=260)
+    )
+
+
+def _ghg_rows(option_id: str, evaluation) -> list[dict]:
+    return [
+        {"option": option_id, "indicator": "Upfront (IND-05)", "value": evaluation.indicators["IND-05"]},
+        {"option": option_id, "indicator": "Lifecycle (IND-06)", "value": evaluation.indicators["IND-06"]},
+    ]
+
+
+def _cost_rows(option_id: str, evaluation) -> list[dict]:
+    # Upfront cost per m² has no named indicator (spec only defines IND-07
+    # as the lifecycle figure) — summed here from already-computed
+    # per-instance figures for the chart, same arithmetic report.py
+    # already does elsewhere, not a new engine computation.
+    upfront_cost = sum(l.upfront_cost for l in evaluation.lifecycle.values()) / evaluation.assembly_area_m2
+    return [
+        {"option": option_id, "indicator": "Upfront capital", "value": upfront_cost},
+        {"option": option_id, "indicator": "Lifecycle (IND-07)", "value": evaluation.indicators["IND-07_undiscounted"]},
+    ]
+
+
+def _recovery_rows(option_id: str, evaluation) -> list[dict]:
+    rows = [{"option": option_id, "indicator": "IND-01 recoverable", "value": evaluation.indicators["IND-01"]}]
+    if "IND-02" in evaluation.indicators:
+        rows.append({"option": option_id, "indicator": "IND-02 reversible", "value": evaluation.indicators["IND-02"]})
+    return rows
+
+
+def _trajectory_chart(
+    result: ProjectResult, option_ids: list[str], metric: str, title: str, break_even_key: str
+) -> alt.Chart:
+    """Cumulative GHG or cost by year — the trajectory IND-08's
+    break-even year is read off. A dashed rule marks it when exactly two
+    options were run (the only case break_evens is populated)."""
+    study_period = result.library.project_parameters.study_period
+    rows = [
+        {"option": option_id, "year": year, "value": value}
+        for option_id in option_ids
+        for year, value in enumerate(cumulative_by_year(result.evaluations[option_id].lifecycle, study_period, metric))
+    ]
+    df = pd.DataFrame(rows)
+    line = (
+        alt.Chart(df, title=alt.Title(title, limit=400))
+        .mark_line(strokeWidth=2)
+        .encode(
+            x=alt.X("year:Q", title="Year"),
+            y=alt.Y("value:Q", title=None),
+            color=alt.Color(
+                "option:N", scale=_color_scale(option_ids), sort=option_ids, legend=alt.Legend(title="Option")
+            ),
+            tooltip=["option", "year", alt.Tooltip("value:Q", format=".3g")],
+        )
+        .properties(height=260)
+    )
+    break_even = result.break_evens.get(break_even_key) if result.break_evens else None
+    if break_even is None:
+        return line
+    rule = (
+        alt.Chart(pd.DataFrame({"year": [break_even]}))
+        .mark_rule(strokeDash=[4, 4], color="#898781", strokeWidth=1.5)
+        .encode(x="year:Q")
+    )
+    return line + rule
 
 st.set_page_config(page_title="Circular DfMA — Slice 1", layout="wide")
 
@@ -75,10 +185,39 @@ def _optional_float(raw: str) -> float | None:
 
 st.title("Circular DfMA — Slice 1")
 
+def _selected_option_ids(option_a: str, option_b: str) -> list[str] | None:
+    """Mirrors gui.py's method of the same name. Returns None (run every
+    option, unchanged default) unless exactly two distinct options are
+    picked; raises ValueError for a partial or duplicate selection."""
+    picked = [o for o in (option_a, option_b) if o and o != _ALL_OPTIONS]
+    if not picked:
+        return None
+    if len(picked) == 1:
+        raise ValueError('pick an option for both Compare fields, or leave both as "(all options in file)"')
+    if option_a == option_b:
+        raise ValueError("Compare's two fields must be different options")
+    return picked
+
+
 with st.sidebar:
     st.header("Assessment")
     data_dir_input = st.text_input("Data dir", value=str(DEFAULT_DATA_DIR))
     project_input = st.text_input("Project file", value=str(DEFAULT_PROJECT))
+
+    try:
+        available_options = list_option_ids(Path(project_input))
+    except Exception:  # noqa: BLE001 - project file may not exist/parse yet; reported on Run instead
+        available_options = []
+    compare_choices = [_ALL_OPTIONS, *available_options]
+    st.caption(
+        "A project file can hold more than two options. Compare defaults to "
+        "every option in the file — pick two below to narrow a run to just "
+        "that pair (also what keeps ranking/rank-stability/IND-08 "
+        "break-even meaningful, per spec §1's \"two compared variants\")."
+    )
+    option_a_choice = st.selectbox("Option A", compare_choices, key="option_a_choice")
+    option_b_choice = st.selectbox("Option B", compare_choices, key="option_b_choice")
+
     run_clicked = st.button("Run assessment", key="run_assessment", type="primary", use_container_width=True)
     st.caption(
         "On a shared/public deployment, anything saved via the Add "
@@ -89,17 +228,25 @@ with st.sidebar:
 
 if run_clicked:
     try:
-        st.session_state["project_result"] = evaluate_project(Path(data_dir_input), Path(project_input))
-        st.session_state["project_result_error"] = None
-    except Exception as exc:  # noqa: BLE001 - surfaced below, not swallowed
+        selected = _selected_option_ids(option_a_choice, option_b_choice)
+    except ValueError as exc:
         st.session_state["project_result"] = None
-        st.session_state["project_result_error"] = f"{exc}\n\n{traceback.format_exc()}"
+        st.session_state["project_result_error"] = str(exc)
+    else:
+        try:
+            st.session_state["project_result"] = evaluate_project(
+                Path(data_dir_input), Path(project_input), option_ids=selected
+            )
+            st.session_state["project_result_error"] = None
+        except Exception as exc:  # noqa: BLE001 - surfaced below, not swallowed
+            st.session_state["project_result"] = None
+            st.session_state["project_result_error"] = f"{exc}\n\n{traceback.format_exc()}"
 
 result: ProjectResult | None = st.session_state.get("project_result")
 result_error: str | None = st.session_state.get("project_result_error")
 
-tab_legend, tab_findings, tab_comparison, tab_gaps, tab_add_material, tab_add_connection = st.tabs(
-    ["Legend", "Findings", "Option comparison", "Gap report", "Add material", "Add connection"]
+tab_legend, tab_findings, tab_composition, tab_comparison, tab_gaps, tab_add_material, tab_add_connection = st.tabs(
+    ["Legend", "Findings", "Composition", "Option comparison", "Gap report", "Add material", "Add connection"]
 )
 
 with tab_legend:
@@ -116,23 +263,60 @@ with tab_findings:
         option_id = st.selectbox("Option", option_ids)
         st.code(render_findings(result.evaluations[option_id]), language=None)
 
+with tab_composition:
+    if result is None:
+        st.info("Click **Run assessment** in the sidebar first.")
+    else:
+        st.code(render_composition(result.options, result.library), language=None)
+
 with tab_comparison:
     if result is None:
         st.info("Click **Run assessment** in the sidebar first.")
-    elif result.priority_error:
-        st.info(f"No priority declarations: {result.priority_error}")
     else:
-        content = render_comparison(result.evaluations, result.ranking, result.stability, result.break_evens)
-        if result.constraint_result and result.constraint_result.excluded:
-            content += "\n\nExcluded by constraint:\n"
-            for option_id, reasons in sorted(result.constraint_result.excluded.items()):
-                content += f"  {option_id}: {'; '.join(reasons)}\n"
-        if result.target_report:
-            content += "\nTargets:\n"
-            for option_id in sorted(result.target_report):
-                for indicator_id, met in sorted(result.target_report[option_id].items()):
-                    content += f"  {option_id} {indicator_id}: {'met' if met else 'NOT MET'}\n"
-        st.code(content, language=None)
+        option_ids = sorted(result.evaluations)
+
+        st.subheader("Charts")
+        col1, col2 = st.columns(2)
+        col1.altair_chart(
+            _indicator_bar_chart(result, option_ids, "Embodied GHG per m² (kgCO₂e)", _ghg_rows),
+            use_container_width=True,
+        )
+        col2.altair_chart(
+            _indicator_bar_chart(result, option_ids, f"Cost per m² ({result.library.project_parameters.currency})", _cost_rows),
+            use_container_width=True,
+        )
+        st.altair_chart(
+            _indicator_bar_chart(result, option_ids, "Recovery & reversibility", _recovery_rows),
+            use_container_width=True,
+        )
+        col3, col4 = st.columns(2)
+        col3.altair_chart(
+            _trajectory_chart(result, option_ids, "ghg", "Cumulative GHG (kgCO₂e)", "carbon"),
+            use_container_width=True,
+        )
+        col4.altair_chart(
+            _trajectory_chart(
+                result, option_ids, "cost", f"Cumulative cost ({result.library.project_parameters.currency})", "cost"
+            ),
+            use_container_width=True,
+        )
+
+        st.divider()
+        st.subheader("Full report")
+        if result.priority_error:
+            st.info(f"No priority declarations: {result.priority_error}")
+        else:
+            content = render_comparison(result.evaluations, result.ranking, result.stability, result.break_evens)
+            if result.constraint_result and result.constraint_result.excluded:
+                content += "\n\nExcluded by constraint:\n"
+                for option_id, reasons in sorted(result.constraint_result.excluded.items()):
+                    content += f"  {option_id}: {'; '.join(reasons)}\n"
+            if result.target_report:
+                content += "\nTargets:\n"
+                for option_id in sorted(result.target_report):
+                    for indicator_id, met in sorted(result.target_report[option_id].items()):
+                        content += f"  {option_id} {indicator_id}: {'met' if met else 'NOT MET'}\n"
+            st.code(content, language=None)
 
 with tab_gaps:
     if result is None:

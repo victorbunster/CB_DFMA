@@ -41,10 +41,26 @@ def _by_label(at: AppTest, label: str):
     return next(w for w in at.text_input if w.label == label)
 
 
+def _count_charts(at: AppTest) -> int:
+    # st.altair_chart has no dedicated AppTest element type (unlike e.g.
+    # st.line_chart) — it surfaces as an UnknownElement, so count those.
+    count = 0
+
+    def walk(node) -> None:
+        nonlocal count
+        for child in getattr(node, "children", {}).values():
+            if type(child).__name__ == "UnknownElement":
+                count += 1
+            walk(child)
+
+    walk(at.main)
+    return count
+
+
 def test_app_loads_without_exception() -> None:
     at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
     assert not at.exception
-    assert len(at.tabs) == 6
+    assert len(at.tabs) == 7
 
 
 def test_run_assessment_against_temp_data(temp_data_dir: Path) -> None:
@@ -60,6 +76,86 @@ def test_run_assessment_against_temp_data(temp_data_dir: Path) -> None:
     assert "=== Option comparison" in full_text
     assert "=== Gap report" in full_text
     assert "IND-01" in full_text
+
+
+def test_composition_tab_renders(temp_data_dir: Path) -> None:
+    at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    _by_label(at, "Data dir").set_value(str(temp_data_dir))
+    _by_label(at, "Project file").set_value(str(temp_data_dir / "project_wall.yaml"))
+
+    at.button(key="run_assessment").click().run()
+
+    assert not at.exception
+    full_text = "\n".join(el.value for el in at.get("code"))
+    assert "=== Composition ===" in full_text
+    assert "cladding_panel_alu_mw_25" in full_text
+    assert "adhesive_bond" in full_text and "mechanical_bracket" in full_text
+
+
+def test_charts_render_for_two_options(temp_data_dir: Path) -> None:
+    # data/project_wall.yaml ships with exactly option_a_bonded and
+    # option_b_mechanical, so the default (no Compare selection) run
+    # already exercises the break-even-rule path (len(evaluations) == 2).
+    at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    _by_label(at, "Data dir").set_value(str(temp_data_dir))
+    _by_label(at, "Project file").set_value(str(temp_data_dir / "project_wall.yaml"))
+
+    at.button(key="run_assessment").click().run()
+
+    assert not at.exception
+    # 5 charts: GHG bars, cost bars, recovery bars, GHG trajectory, cost trajectory
+    assert _count_charts(at) == 5
+
+
+def test_compare_selectors_narrow_the_run(temp_data_dir: Path) -> None:
+    from cdfma.graph import Graph, append_option
+    from cdfma.schema import Instance
+
+    project_path = temp_data_dir / "project_wall.yaml"
+    append_option(
+        project_path,
+        "option_c_extra",
+        Graph(
+            instances={
+                "x": Instance(id="x", element_type_id="cladding_panel_alu_mw_25"),
+                "y": Instance(id="y", element_type_id="substrate_60"),
+            },
+            connection_instances={},
+            composition_edges=[],
+            dependency_edges=[],
+        ),
+    )
+
+    at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    _by_label(at, "Data dir").set_value(str(temp_data_dir))
+    _by_label(at, "Project file").set_value(str(project_path))
+    at.button(key="run_assessment").click().run()
+
+    findings_text = "\n".join(el.value for el in at.get("code"))
+    assert "option_c_extra" in findings_text  # default: every option, including the new one
+
+    at.selectbox(key="option_a_choice").set_value("option_a_bonded")
+    at.selectbox(key="option_b_choice").set_value("option_b_mechanical")
+    at.button(key="run_assessment").click().run()
+
+    assert not at.exception
+    narrowed_text = "\n".join(el.value for el in at.get("code"))
+    assert "option_c_extra" not in narrowed_text
+    assert "option_a_bonded" in narrowed_text and "option_b_mechanical" in narrowed_text
+    assert "break-even" in narrowed_text.lower() or "IND-08" in narrowed_text
+
+
+def test_compare_selectors_reject_partial_selection(temp_data_dir: Path) -> None:
+    at = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    _by_label(at, "Data dir").set_value(str(temp_data_dir))
+    _by_label(at, "Project file").set_value(str(temp_data_dir / "project_wall.yaml"))
+
+    at.selectbox(key="option_a_choice").set_value("option_a_bonded")
+    # option_b_choice left as "(all options in file)"
+    at.button(key="run_assessment").click().run()
+
+    assert not at.exception  # an invalid selection must surface an error, never crash
+    assert at.error
 
 
 def test_add_material_saves_and_reloads(temp_data_dir: Path) -> None:

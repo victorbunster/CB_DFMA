@@ -418,6 +418,27 @@ def run_engine(
     )
 
 
+def cumulative_by_year(lifecycle: dict[str, LifecycleResult], study_period: int, metric: str) -> list[float]:
+    """Cumulative GHG or cost (``metric`` is ``"ghg"`` or ``"cost"``) at
+    each year from 0 to ``study_period`` inclusive, summed across every
+    instance's events — the trajectory ``break_even_year`` compares two
+    of, and what a break-even chart plots directly. Returns
+    ``study_period + 1`` values, index == year.
+    """
+    events: list[tuple[int, float]] = []
+    for result in lifecycle.values():
+        events.extend(result.ghg_events if metric == "ghg" else result.cost_events)
+    by_year = defaultdict(float)
+    for year, amount in events:
+        by_year[year] += amount
+    cumulative_values = []
+    running = 0.0
+    for year in range(study_period + 1):
+        running += by_year.get(year, 0.0)
+        cumulative_values.append(running)
+    return cumulative_values
+
+
 def break_even_year(
     series_a: dict[str, LifecycleResult], series_b: dict[str, LifecycleResult], study_period: int, metric: str
 ) -> int | None:
@@ -425,22 +446,8 @@ def break_even_year(
     (spec §3.2's "reported as two numbers... which frequently disagree").
     ``metric`` is ``"ghg"`` or ``"cost"``.
     """
-
-    def cumulative(series: dict[str, LifecycleResult]) -> list[float]:
-        events: list[tuple[int, float]] = []
-        for result in series.values():
-            events.extend(result.ghg_events if metric == "ghg" else result.cost_events)
-        by_year = defaultdict(float)
-        for year, amount in events:
-            by_year[year] += amount
-        cumulative_values = []
-        running = 0.0
-        for year in range(study_period + 1):
-            running += by_year.get(year, 0.0)
-            cumulative_values.append(running)
-        return cumulative_values
-
-    cum_a, cum_b = cumulative(series_a), cumulative(series_b)
+    cum_a = cumulative_by_year(series_a, study_period, metric)
+    cum_b = cumulative_by_year(series_b, study_period, metric)
     initial_sign = cum_a[0] - cum_b[0]
     for year in range(1, study_period + 1):
         current_sign = cum_a[year] - cum_b[year]
